@@ -5,6 +5,15 @@ import Balloon from './components/Balloon';
 
 type BreathingState = 'idle' | 'pre-start' | 'in' | 'hold-in' | 'out' | 'hold-out';
 
+const promptMap: { [key in BreathingState]: string } = {
+  'idle': '',
+  'pre-start': 'Get ready...',
+  'in': 'Breathe in',
+  'hold-in': 'Hold',
+  'out': 'Breathe out',
+  'hold-out': 'Hold',
+};
+
 export default function Home() {
   const [cycles, setCycles] = useState(1);
   const [breathingState, setBreathingState] = useState<BreathingState>('idle');
@@ -64,10 +73,26 @@ export default function Home() {
     setCountdown(8);
   };
 
+  const mainContainerClasses =
+    breathingState === 'idle'
+      ? 'flex w-full max-w-md flex-col items-center justify-center rounded-lg bg-white p-6 shadow-lg sm:p-8'
+      : 'flex w-full flex-col items-center justify-start pt-20 sm:max-w-md sm:justify-center sm:rounded-lg sm:bg-white sm:pt-0 sm:p-8 sm:shadow-lg';
+
+  const topContainerClasses =
+    breathingState === 'idle'
+      ? 'flex min-h-screen flex-col items-center justify-center bg-gray-50 p-4'
+      : 'flex min-h-screen flex-col items-center bg-gray-50 p-4';
+
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 p-4">
-      <main className="flex w-full max-w-md flex-col items-center justify-center rounded-lg bg-white p-6 shadow-lg sm:p-8">
-        <h1 className="mb-4 text-3xl font-bold sm:text-4xl">Box Breathing</h1>
+    <div className={topContainerClasses}>
+      <main className={mainContainerClasses}>
+        <h1
+          className={`mb-4 text-3xl font-bold sm:text-4xl ${
+            breathingState !== 'idle' ? 'sm:block' : ''
+          }`}
+        >
+          Box Breathing
+        </h1>
         {breathingState === 'idle' ? (
           <>
             <div className="mb-6">
@@ -95,7 +120,9 @@ export default function Home() {
             </button>
           </>
         ) : (
-          <Balloon breathingState={breathingState} countdown={countdown} />
+          <div className="mt-8">
+            <Balloon breathingState={breathingState} countdown={countdown} prompt={promptMap[breathingState]} />
+          </div>
         )}
       </main>
     </div>
