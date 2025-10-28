@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import Balloon from './components/Balloon';
+import AudioControls from './components/AudioControls';
+import CloudBackground from './components/CloudBackground';
+import CycleDropdown from './components/CycleDropdown';
+import { useAudio } from './hooks/useAudio';
 
 type BreathingState = 'idle' | 'pre-start' | 'in' | 'hold-in' | 'out' | 'hold-out' | 'completed';
 
@@ -21,6 +25,9 @@ export default function Home() {
   const [countdown, setCountdown] = useState(0);
   const [currentCycle, setCurrentCycle] = useState(0);
   const [totalDuration, setTotalDuration] = useState(0);
+
+  // Audio management
+  const { volume, isMuted, toggleMute, updateVolume } = useAudio(breathingState);
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
@@ -122,8 +129,8 @@ export default function Home() {
 
   const mainContainerClasses =
     breathingState === 'idle' || breathingState === 'completed'
-      ? 'flex w-full max-w-md flex-col items-center justify-center rounded-2xl bg-white p-6 shadow-xl sm:p-8'
-      : 'flex w-full flex-col items-center justify-center min-h-screen';
+      ? 'flex w-full max-w-md flex-col items-center justify-center rounded-2xl bg-white p-6 shadow-2xl sm:p-8 relative z-10'
+      : 'flex w-full flex-col items-center justify-center min-h-screen relative z-10';
 
   const topContainerClasses =
     'flex min-h-screen flex-col items-center justify-center p-4 bg-gradient-to-br from-[#f0f9ff] via-[#e6f2ff] to-[#cce6ff]';
@@ -136,12 +143,25 @@ export default function Home() {
 
   return (
     <div className={topContainerClasses}>
+      <CloudBackground />
       <main className={mainContainerClasses}>
         {breathingState === 'idle' ? (
           <>
-            <div className="absolute top-6 left-6 bg-cyan-100/50 p-2 rounded-xl">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 text-cyan-600">
-                <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm.53 5.47a.75.75 0 00-1.06 0l-3 3a.75.75 0 101.06 1.06l1.72-1.72v5.69a.75.75 0 001.5 0v-5.69l1.72 1.72a.75.75 0 101.06-1.06l-3-3z" clipRule="evenodd" />
+            <div className="absolute top-6 left-6 bg-cyan-100/50 p-3 rounded-xl">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" fill="none" className="w-10 h-5">
+                <defs>
+                  <filter id="blur-icon">
+                    <feGaussianBlur in="SourceGraphic" stdDeviation="4"/>
+                  </filter>
+                </defs>
+                <g filter="url(#blur-icon)" opacity="0.9">
+                  <ellipse cx="100" cy="100" rx="60" ry="40" fill="#0891b2"/>
+                  <ellipse cx="160" cy="90" rx="70" ry="50" fill="#0891b2"/>
+                  <ellipse cx="220" cy="100" rx="65" ry="45" fill="#0891b2"/>
+                  <ellipse cx="280" cy="95" rx="55" ry="38" fill="#0891b2"/>
+                  <ellipse cx="140" cy="120" rx="50" ry="30" fill="#0891b2"/>
+                  <ellipse cx="200" cy="125" rx="60" ry="35" fill="#0891b2"/>
+                </g>
               </svg>
             </div>
             <h1 className="mb-2 text-4xl font-bold text-gray-800 text-center">
@@ -152,25 +172,14 @@ export default function Home() {
             </p>
             <div className="mb-6 w-full max-w-xs">
               <div className="flex items-center justify-between mb-2">
-                <label htmlFor="cycles" className="text-lg text-gray-700">
+                <label htmlFor="cycles" className="text-lg text-gray-700 font-bold">
                   Number of cycles
                 </label>
                 <span className="text-gray-600">
                   {`${Math.floor(cycles * 16 / 60)}:${(cycles * 16 % 60).toString().padStart(2, '0')} total`}
                 </span>
               </div>
-              <select
-                id="cycles"
-                value={cycles}
-                onChange={(e) => setCycles(Number(e.target.value))}
-                className="w-full rounded-xl border-2 border-gray-200 p-2 text-lg text-gray-800 focus:ring-2 focus:ring-cyan-500"
-              >
-                {[...Array(10).keys()].map((i) => (
-                  <option key={i + 1} value={i + 1}>
-                    {i + 1}
-                  </option>
-                ))}
-              </select>
+              <CycleDropdown value={cycles} onChange={setCycles} />
             </div>
             <button
               onClick={startExercise}
@@ -199,19 +208,27 @@ export default function Home() {
           </>
         ) : (
           <>
-            <div className="absolute top-4 right-4 flex items-center">
-              <button 
-                onClick={stopExercise}
-                className="mr-4 text-gray-600 hover:text-gray-900"
-                aria-label="Stop breathing exercise"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-              <span className="text-xl font-semibold">
-                {`${minutesRemaining.toString().padStart(2, '0')}:${secondsRemaining.toString().padStart(2, '0')}`}
-              </span>
+            <div className="absolute top-4 right-4 flex flex-col items-end gap-2">
+              <div className="flex items-center">
+                <button
+                  onClick={stopExercise}
+                  className="mr-4 text-gray-600 hover:text-gray-900"
+                  aria-label="Stop breathing exercise"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+                <span className="text-xl font-semibold">
+                  {`${minutesRemaining.toString().padStart(2, '0')}:${secondsRemaining.toString().padStart(2, '0')}`}
+                </span>
+              </div>
+              <AudioControls
+                volume={volume}
+                isMuted={isMuted}
+                onToggleMute={toggleMute}
+                onVolumeChange={updateVolume}
+              />
             </div>
             <div className="mt-8">
               <Balloon breathingState={breathingState} countdown={countdown} prompt={promptMap[breathingState]} />
