@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import Balloon from './components/Balloon';
-import AudioControls from './components/AudioControls';
+// import AudioControls from './components/AudioControls';
 import CloudBackground from './components/CloudBackground';
 import CycleDropdown from './components/CycleDropdown';
-import { useAudio } from './hooks/useAudio';
+// import { useAudio } from './hooks/useAudio';
 
 type BreathingState = 'idle' | 'pre-start' | 'in' | 'hold-in' | 'out' | 'hold-out' | 'completed';
 
@@ -26,8 +26,8 @@ export default function Home() {
   const [currentCycle, setCurrentCycle] = useState(0);
   const [totalDuration, setTotalDuration] = useState(0);
 
-  // Audio management
-  const { volume, isMuted, toggleMute, updateVolume } = useAudio(breathingState);
+  // Audio management - DISABLED FOR NOW, will re-enable after new audio files
+  // const { volume, isMuted, toggleMute, updateVolume } = useAudio(breathingState);
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
@@ -198,38 +198,34 @@ export default function Home() {
             </div>
             <button
               onClick={() => setBreathingState('idle')}
-              className="mt-4 flex items-center text-lg text-gray-600 hover:text-gray-900"
+              className="mt-8 w-full max-w-xs rounded-xl bg-cyan-500 px-6 py-3 text-xl font-semibold text-white shadow-lg shadow-cyan-500/30 transition-transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
               Back to Start
             </button>
           </>
         ) : (
           <>
-            <div className="absolute top-4 right-4 flex flex-col items-end gap-2">
-              <div className="flex items-center">
-                <button
-                  onClick={stopExercise}
-                  className="mr-4 text-gray-600 hover:text-gray-900"
-                  aria-label="Stop breathing exercise"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-                <span className="text-xl font-semibold">
-                  {`${minutesRemaining.toString().padStart(2, '0')}:${secondsRemaining.toString().padStart(2, '0')}`}
-                </span>
-              </div>
-              <AudioControls
-                volume={volume}
-                isMuted={isMuted}
-                onToggleMute={toggleMute}
-                onVolumeChange={updateVolume}
-              />
+            <div className="absolute top-4 right-4 flex items-center">
+              <button
+                onClick={stopExercise}
+                className="mr-4 text-gray-600 hover:text-gray-900"
+                aria-label="Stop breathing exercise"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <span className="text-xl font-semibold">
+                {`${minutesRemaining.toString().padStart(2, '0')}:${secondsRemaining.toString().padStart(2, '0')}`}
+              </span>
             </div>
+            {/* Audio controls disabled until new audio files ready */}
+            {/* <AudioControls
+              volume={volume}
+              isMuted={isMuted}
+              onToggleMute={toggleMute}
+              onVolumeChange={updateVolume}
+            /> */}
             <div className="mt-8">
               <Balloon breathingState={breathingState} countdown={countdown} prompt={promptMap[breathingState]} />
             </div>

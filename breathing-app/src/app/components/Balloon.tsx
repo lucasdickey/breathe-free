@@ -100,9 +100,9 @@ const Balloon = ({ breathingState, countdown, prompt }: BalloonProps) => {
                    `scale(1)` 
       }}
     >
-      <div className="absolute flex flex-col items-center justify-center">
-        <span 
-          className={`text-2xl font-bold transition-opacity duration-300 ease-in-out ${['idle', 'completed'].includes(breathingState) ? 'text-gray-800' : 'text-white'} sm:text-2xl`}
+      <div className="absolute flex flex-col items-center justify-center text-center">
+        <span
+          className={`text-2xl font-bold transition-opacity duration-300 ease-in-out ${['idle', 'completed'].includes(breathingState) ? 'text-gray-800' : 'text-white'} sm:text-2xl text-center`}
           style={{ opacity: textOpacity }}
         >
           {displayText}
