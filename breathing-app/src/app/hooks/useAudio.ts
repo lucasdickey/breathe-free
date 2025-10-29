@@ -2,114 +2,70 @@ import { useEffect, useRef, useState } from 'react';
 
 type BreathingState = 'idle' | 'pre-start' | 'in' | 'hold-in' | 'out' | 'hold-out' | 'completed';
 
-const audioFiles: { [key in BreathingState]?: string } = {
-  'in': '/audio/breath-chord-one.mp3',
-  'hold-in': '/audio/breath-chord-two.mp3',
-  'out': '/audio/breath-chord-three.mp3',
-  'hold-out': '/audio/breath-chord-four.mp3',
-};
+const audioFile = '/audio/breath-chord-loop-icetinespad.mp3';
 
 export function useAudio(breathingState: BreathingState) {
   const [volume, setVolume] = useState(0.7);
   const [isMuted, setIsMuted] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const previousStateRef = useRef<BreathingState>('idle');
-  const previousMutedRef = useRef<boolean>(false);
-  const preloadedAudioRef = useRef<{ [key: string]: HTMLAudioElement }>({});
+  const isPlayingRef = useRef<boolean>(false);
 
-  // Preload all audio files on mount
+  // Initialize and preload audio on mount
   useEffect(() => {
-    const preloadAudio = () => {
-      Object.entries(audioFiles).forEach(([state, path]) => {
-        if (path) {
-          const audio = new Audio(path);
-          audio.preload = 'auto';
-          audio.load();
-          preloadedAudioRef.current[state] = audio;
-        }
-      });
-    };
+    const audio = new Audio(audioFile);
+    audio.preload = 'auto';
+    audio.loop = false; // Don't auto-loop, let breathing cycle control it
+    audio.volume = volume;
 
-    preloadAudio();
+    // Set playback rate to match 16-second breathing cycle
+    // Once metadata is loaded, calculate the correct playback rate
+    audio.addEventListener('loadedmetadata', () => {
+      const actualDuration = audio.duration;
+      const targetDuration = 16; // 16 seconds for one complete breathing cycle
+      audio.playbackRate = actualDuration / targetDuration;
+    });
 
-    // Cleanup preloaded audio on unmount
+    audioRef.current = audio;
+
+    // Cleanup on unmount
     return () => {
-      Object.values(preloadedAudioRef.current).forEach(audio => {
-        audio.pause();
-        audio.src = '';
-      });
-      preloadedAudioRef.current = {};
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+        audioRef.current = null;
+      }
     };
   }, []);
 
+  // Handle playback based on breathing state
   useEffect(() => {
-    // Initialize audio elements for each phase
-    const audioPath = audioFiles[breathingState];
+    if (!audioRef.current) return;
 
-    // Stop audio when returning to idle or completed state
-    if ((breathingState === 'idle' || breathingState === 'completed') && audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-      previousStateRef.current = breathingState;
-      return;
-    }
+    const audio = audioRef.current;
 
-    if (audioPath && breathingState !== previousStateRef.current) {
-      // Create new audio element
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-
-      const audio = new Audio(audioPath);
-      audio.volume = isMuted ? 0 : volume;
-      audio.loop = true; // Loop audio for the duration of the phase
-      audioRef.current = audio;
-
-      // Play the audio
+    // Start playing from the beginning each time we reach the 'in' phase
+    if (breathingState === 'in') {
+      audio.currentTime = 0; // Restart from beginning
       audio.play().catch(error => {
         console.error('Error playing audio:', error);
       });
-
-      previousStateRef.current = breathingState;
+      isPlayingRef.current = true;
     }
 
-    // Clean up when component unmounts or state changes
-    return () => {
-      if (audioRef.current && breathingState !== previousStateRef.current) {
-        audioRef.current.pause();
-      }
-    };
-  }, [breathingState, volume, isMuted]);
+    // Stop audio when returning to idle or completed state
+    if ((breathingState === 'idle' || breathingState === 'completed') && isPlayingRef.current) {
+      audio.pause();
+      audio.currentTime = 0;
+      isPlayingRef.current = false;
+    }
+  }, [breathingState]);
 
-  // Handle unmuting - play audio for current phase immediately
+  // Handle volume and mute changes
   useEffect(() => {
-    const audioPath = audioFiles[breathingState];
-
-    // If we just unmuted (was muted, now not muted) and we have an audio file for this state
-    if (previousMutedRef.current && !isMuted && audioPath) {
-      // Create and play new audio for current phase
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
-
-      const audio = new Audio(audioPath);
-      audio.volume = volume;
-      audio.loop = true;
-      audioRef.current = audio;
-
-      audio.play().catch(error => {
-        console.error('Error playing audio on unmute:', error);
-      });
-    }
-
-    // Update volume for existing audio
     if (audioRef.current) {
       audioRef.current.volume = isMuted ? 0 : volume;
     }
-
-    previousMutedRef.current = isMuted;
-  }, [volume, isMuted, breathingState]);
+  }, [volume, isMuted]);
 
   const toggleMute = () => {
     setIsMuted(!isMuted);

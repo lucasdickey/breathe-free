@@ -28,7 +28,7 @@ export default function AudioControls({
   };
 
   return (
-    <div className="relative flex items-center justify-center gap-4 mt-4">
+    <div className="relative flex items-center gap-4">
       {/* Mute/Unmute Toggle */}
       <button
         onClick={onToggleMute}
