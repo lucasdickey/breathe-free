@@ -197,18 +197,18 @@ export default function Home() {
           </>
         ) : (
           <>
-            <div className="absolute top-4 right-4 flex flex-col items-end gap-2">
-              <div className="flex items-center">
+            <div className="absolute top-4 right-4 flex flex-col items-end gap-2 z-20">
+              <div className="flex items-center bg-white/80 backdrop-blur-sm rounded-full px-4 py-2 shadow-md">
                 <button
                   onClick={stopExercise}
-                  className="mr-4 text-gray-600 hover:text-gray-900"
+                  className="mr-3 text-gray-600 hover:text-gray-900"
                   aria-label="Stop breathing exercise"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
-                <span className="text-xl font-semibold">
+                <span className="text-lg sm:text-xl font-semibold text-gray-800">
                   {`${minutesRemaining.toString().padStart(2, '0')}:${secondsRemaining.toString().padStart(2, '0')}`}
                 </span>
               </div>
