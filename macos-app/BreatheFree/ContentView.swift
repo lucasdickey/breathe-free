@@ -14,6 +14,7 @@ struct ContentView: View {
     @State private var selectedCycles: Int = 10
     @State private var currentCycle: Int = 0
     @State private var totalDuration: Int = 0
+    @State private var sessionDuration: Int = 0
     @State private var timer: Timer?
 
     var body: some View {
@@ -122,6 +123,9 @@ struct ContentView: View {
             if breathingState.isActiveBreathing || breathingState == .preStart {
                 Color(red: 0.024, green: 0.714, blue: 0.831)
                     .ignoresSafeArea()
+
+                // Animated clouds
+                CloudBackgroundView()
             }
 
             VStack {
@@ -129,14 +133,14 @@ struct ContentView: View {
                 HStack {
                     Spacer()
 
-                    // Timer display
+                    // Timer display (remaining time)
                     if breathingState.isActiveBreathing {
                         HStack(spacing: 12) {
                             Image(systemName: "clock")
                                 .font(.system(size: 16))
                                 .foregroundColor(.white)
 
-                            Text(formatTime(totalDuration))
+                            Text(formatTime(sessionDuration - totalDuration))
                                 .font(.system(size: 18, weight: .semibold))
                                 .foregroundColor(.white)
                         }
@@ -214,6 +218,8 @@ struct ContentView: View {
         countdown = breathingState.duration
         currentCycle = 1
         totalDuration = 0
+        // Calculate total session duration: 8 seconds pre-start + (4*4 seconds per cycle)
+        sessionDuration = 8 + (selectedCycles * 16)
 
         // Trigger initial haptic
         HapticManager.shared.triggerHaptic(for: .preStart)

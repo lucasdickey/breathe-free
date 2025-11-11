@@ -16,7 +16,7 @@ struct BalloonView: View {
         ZStack {
             // Balloon circle
             Circle()
-                .fill(balloonColor)
+                .fill(state.balloonColor)
                 .frame(width: 256, height: 256)
                 .scaleEffect(scale)
                 .animation(
@@ -30,6 +30,7 @@ struct BalloonView: View {
                     .font(.system(size: 24, weight: .bold))
                     .foregroundColor(textColor)
                     .multilineTextAlignment(.center)
+                    .lineLimit(2)
                     .padding(.horizontal, 20)
                     .opacity(textOpacity)
                     .animation(.easeInOut(duration: 0.2), value: state)
@@ -49,14 +50,6 @@ struct BalloonView: View {
         }
         .onAppear {
             updateScale(for: state)
-        }
-    }
-
-    private var balloonColor: Color {
-        if state == .idle || state == .completed {
-            return .white
-        } else {
-            return Color(red: 0.024, green: 0.714, blue: 0.831) // Cyan #06b6d4
         }
     }
 

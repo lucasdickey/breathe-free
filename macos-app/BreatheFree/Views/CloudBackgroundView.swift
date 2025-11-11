@@ -81,7 +81,7 @@ struct CloudAnimationModifier: ViewModifier {
     let delay: Double
     let yOffset: CGFloat
 
-    @State private var offset: CGFloat = -200
+    @State private var offset: CGFloat = 0
 
     func body(content: Content) -> some View {
         content
@@ -92,7 +92,7 @@ struct CloudAnimationModifier: ViewModifier {
                     .repeatForever(autoreverses: false)
                     .delay(delay)
                 ) {
-                    offset = 1200 // Move across screen
+                    offset = 1600 // Move from left edge (0) to right edge and beyond
                 }
             }
     }

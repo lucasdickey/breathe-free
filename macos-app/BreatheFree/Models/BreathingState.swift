@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SwiftUI
 
 enum BreathingState: String {
     case idle = "idle"
@@ -31,7 +32,16 @@ enum BreathingState: String {
         case .holdOut:
             return "Hold"
         case .completed:
-            return "Be easy, breathe deeply"
+            return "Be easy\nBreathe deeply"
+        }
+    }
+
+    var balloonColor: Color {
+        switch self {
+        case .idle, .completed:
+            return .white
+        default:
+            return Color(red: 0.024, green: 0.714, blue: 0.831) // Cyan
         }
     }
 
