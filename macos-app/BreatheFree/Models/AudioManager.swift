@@ -13,7 +13,6 @@ class AudioManager: ObservableObject {
     @Published var isMuted: Bool = false
 
     private var audioPlayer: AVAudioPlayer?
-    private var audioSession = AVAudioSession.sharedInstance()
 
     init() {
         setupAudio()
@@ -26,10 +25,6 @@ class AudioManager: ObservableObject {
         }
 
         do {
-            // Configure audio session
-            try audioSession.setCategory(.playback, mode: .default)
-            try audioSession.setActive(true)
-
             // Create audio player
             audioPlayer = try AVAudioPlayer(contentsOf: url)
             audioPlayer?.prepareToPlay()

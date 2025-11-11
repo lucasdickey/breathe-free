@@ -113,12 +113,16 @@ struct VolumeModalView: View {
     }
 }
 
-#Preview {
-    ZStack {
-        Color(red: 0.024, green: 0.714, blue: 0.831)
-            .ignoresSafeArea()
+#if DEBUG
+struct AudioControlsView_Previews: PreviewProvider {
+    static var previews: some View {
+        ZStack {
+            Color(red: 0.024, green: 0.714, blue: 0.831)
+                .ignoresSafeArea()
 
-        AudioControlsView(audioManager: AudioManager())
+            AudioControlsView(audioManager: AudioManager())
+        }
+        .frame(width: 600, height: 400)
     }
-    .frame(width: 600, height: 400)
 }
+#endif

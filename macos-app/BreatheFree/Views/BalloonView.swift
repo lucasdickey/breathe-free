@@ -44,7 +44,7 @@ struct BalloonView: View {
                 }
             }
         }
-        .onChange(of: state) { _, newState in
+        .onChange(of: state) { newState in
             updateScale(for: newState)
         }
         .onAppear {
@@ -81,12 +81,16 @@ struct BalloonView: View {
     }
 }
 
-#Preview {
-    VStack(spacing: 40) {
-        BalloonView(state: .idle, countdown: 0)
-        BalloonView(state: .breatheIn, countdown: 4)
-        BalloonView(state: .holdIn, countdown: 3)
+#if DEBUG
+struct BalloonView_Previews: PreviewProvider {
+    static var previews: some View {
+        VStack(spacing: 40) {
+            BalloonView(state: .idle, countdown: 0)
+            BalloonView(state: .breatheIn, countdown: 4)
+            BalloonView(state: .holdIn, countdown: 3)
+        }
+        .padding()
+        .frame(width: 600, height: 800)
     }
-    .padding()
-    .frame(width: 600, height: 800)
 }
+#endif

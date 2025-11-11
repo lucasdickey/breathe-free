@@ -108,11 +108,15 @@ struct CycleDropdownView: View {
     }
 }
 
-#Preview {
-    VStack(spacing: 20) {
-        CycleDropdownView(selectedCycles: .constant(10))
+#if DEBUG
+struct CycleDropdownView_Previews: PreviewProvider {
+    static var previews: some View {
+        VStack(spacing: 20) {
+            CycleDropdownView(selectedCycles: .constant(10))
+        }
+        .padding()
+        .frame(width: 600, height: 400)
+        .background(Color(red: 0.941, green: 0.976, blue: 1.0))
     }
-    .padding()
-    .frame(width: 600, height: 400)
-    .background(Color(red: 0.941, green: 0.976, blue: 1.0))
 }
+#endif

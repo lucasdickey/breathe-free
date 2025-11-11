@@ -281,7 +281,11 @@ struct ContentView: View {
     }
 }
 
-#Preview {
-    ContentView()
-        .frame(width: 800, height: 600)
+#if DEBUG
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
+            .frame(width: 800, height: 600)
+    }
 }
+#endif

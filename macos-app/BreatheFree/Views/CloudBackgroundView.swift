@@ -98,20 +98,24 @@ struct CloudAnimationModifier: ViewModifier {
     }
 }
 
-#Preview {
-    ZStack {
-        LinearGradient(
-            colors: [
-                Color(red: 0.941, green: 0.976, blue: 1.0),
-                Color(red: 0.902, green: 0.949, blue: 1.0),
-                Color(red: 0.8, green: 0.902, blue: 1.0)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .ignoresSafeArea()
+#if DEBUG
+struct CloudBackgroundView_Previews: PreviewProvider {
+    static var previews: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.941, green: 0.976, blue: 1.0),
+                    Color(red: 0.902, green: 0.949, blue: 1.0),
+                    Color(red: 0.8, green: 0.902, blue: 1.0)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
 
-        CloudBackgroundView()
+            CloudBackgroundView()
+        }
+        .frame(width: 800, height: 600)
     }
-    .frame(width: 800, height: 600)
 }
+#endif
