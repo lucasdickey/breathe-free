@@ -24,18 +24,16 @@
       },
       "permissions": [],
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "minSdkVersion": 24,
+      "targetSdkVersion": 34,
+      "ndk": {
+        "debugSymbols": false
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      [
-        "expo-av",
-        {
-          "microphonePermission": false
-        }
-      ]
-    ]
+    "plugins": []
   }
 }

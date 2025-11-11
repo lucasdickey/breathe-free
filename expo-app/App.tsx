@@ -26,7 +26,7 @@ const promptMap: { [key in BreathingState]: string } = {
   'hold-in': 'Hold',
   'out': 'Breathe out',
   'hold-out': 'Hold',
-  'completed': 'Be easy, breathe deeply',
+  'completed': 'Be easy\nBreathe deeply',
 };
 
 const BreathIcon = () => (
@@ -51,8 +51,8 @@ export default function App() {
   const [currentCycle, setCurrentCycle] = useState(0);
   const [totalDuration, setTotalDuration] = useState(0);
 
-  // Audio management
-  const { volume, isMuted, toggleMute, updateVolume } = useAudio(breathingState);
+  // Audio management (disabled - to be fixed later)
+  // const { volume, isMuted, toggleMute, updateVolume } = useAudio(breathingState);
 
   // Haptic feedback
   useHaptics(breathingState);
@@ -177,12 +177,13 @@ export default function App() {
                   {`${minutesRemaining.toString().padStart(2, '0')}:${secondsRemaining.toString().padStart(2, '0')}`}
                 </Text>
               </View>
-              <AudioControls
+              {/* AudioControls disabled - audio to be fixed later */}
+              {/* <AudioControls
                 volume={volume}
                 isMuted={isMuted}
                 onToggleMute={toggleMute}
                 onVolumeChange={updateVolume}
-              />
+              /> */}
             </View>
             <View style={styles.balloonWrapper}>
               <Balloon
@@ -207,12 +208,9 @@ export default function App() {
                   <Text style={styles.subtitle}>Find your calm through guided breathing</Text>
 
                   <View style={styles.cycleSection}>
-                    <View style={styles.cycleHeader}>
-                      <Text style={styles.cycleLabel}>Number of cycles</Text>
-                      <Text style={styles.cycleTime}>
-                        {`${Math.floor(cycles * 16 / 60)}:${(cycles * 16 % 60).toString().padStart(2, '0')} total`}
-                      </Text>
-                    </View>
+                    <Text style={styles.cycleLabel}>
+                      Number of cycles
+                    </Text>
                     <CycleDropdown value={cycles} onChange={setCycles} />
                   </View>
 
@@ -224,7 +222,7 @@ export default function App() {
                   </TouchableOpacity>
 
                   <Text style={styles.instructionText}>
-                    Box breathing: Inhale • Hold • Exhale • Hold
+                    Inhale • Hold • Exhale • Hold
                   </Text>
                 </>
               ) : (
@@ -287,7 +285,7 @@ const styles = StyleSheet.create({
   },
   topBar: {
     position: 'absolute',
-    top: 16,
+    top: 50,
     right: 16,
     flexDirection: 'column',
     alignItems: 'flex-end',
@@ -341,22 +339,12 @@ const styles = StyleSheet.create({
     width: '100%',
     marginBottom: 32,
   },
-  cycleHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-    gap: 12,
-  },
   cycleLabel: {
-    fontSize: 18,
+    fontSize: 16,
     color: '#374151',
-    fontWeight: 'bold',
-  },
-  cycleTime: {
-    fontSize: 14,
-    color: '#6b7280',
-    fontWeight: '500',
+    fontWeight: '600',
+    marginBottom: 12,
+    textAlign: 'center',
   },
   startButton: {
     width: '100%',

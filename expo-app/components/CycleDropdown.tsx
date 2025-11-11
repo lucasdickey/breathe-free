@@ -54,25 +54,29 @@ export default function CycleDropdown({ value, onChange }: CycleDropdownProps) {
           onPress={() => setIsOpen(false)}
         >
           <View style={styles.dropdown}>
-            {cycleOptions.map((option) => (
-              <TouchableOpacity
-                key={option}
-                onPress={() => handleSelect(option)}
-                style={[
-                  styles.option,
-                  value === option && styles.selectedOption,
-                ]}
-              >
-                <Text
+            {cycleOptions.map((option) => {
+              const minutes = Math.floor(option * 16 / 60);
+              const seconds = (option * 16 % 60).toString().padStart(2, '0');
+              return (
+                <TouchableOpacity
+                  key={option}
+                  onPress={() => handleSelect(option)}
                   style={[
-                    styles.optionText,
-                    value === option && styles.selectedOptionText,
+                    styles.option,
+                    value === option && styles.selectedOption,
                   ]}
                 >
-                  {option}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Text
+                    style={[
+                      styles.optionText,
+                      value === option && styles.selectedOptionText,
+                    ]}
+                  >
+                    {`${option} (${minutes}:${seconds})`}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </Pressable>
       </Modal>

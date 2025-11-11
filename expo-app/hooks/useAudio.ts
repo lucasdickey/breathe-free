@@ -66,14 +66,14 @@ export function useAudio(breathingState: BreathingState) {
       const sound = soundRef.current;
 
       try {
-        // Start playing from the beginning each time we reach the 'in' phase
-        if (breathingState === 'in') {
+        // Start playing only when we enter the 'in' phase (actual breathing starts)
+        if (breathingState === 'in' && !isPlayingRef.current) {
           await sound.setPositionAsync(0); // Restart from beginning
           await sound.playAsync();
           isPlayingRef.current = true;
         }
 
-        // Stop audio when returning to idle or completed state
+        // Stop audio only when returning to idle or completed state
         if ((breathingState === 'idle' || breathingState === 'completed') && isPlayingRef.current) {
           await sound.stopAsync();
           await sound.setPositionAsync(0);
