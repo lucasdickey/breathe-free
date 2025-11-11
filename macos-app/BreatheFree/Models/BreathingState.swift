@@ -41,7 +41,7 @@ enum BreathingState: String {
         case .idle, .completed:
             return .white
         default:
-            return Color(red: 0.024, green: 0.714, blue: 0.831) // Cyan
+            return Color(red: 0.4, green: 0.85, blue: 0.95) // Lighter cyan/sky blue
         }
     }
 
