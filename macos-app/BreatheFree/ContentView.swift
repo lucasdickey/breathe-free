@@ -48,72 +48,69 @@ struct ContentView: View {
 
     // MARK: - Idle View (Home Screen)
     private var idleView: some View {
-        ScrollView {
-            VStack(spacing: 32) {
-                Spacer()
+        VStack(spacing: 32) {
+            Spacer()
 
-                VStack(spacing: 24) {
-                    // Breathing icon
-                    ZStack {
-                        ForEach(0..<3) { index in
-                            Circle()
-                                .stroke(
-                                    Color(red: 0.024, green: 0.714, blue: 0.831),
-                                    lineWidth: 2
-                                )
-                                .frame(width: CGFloat(80 + index * 30), height: CGFloat(80 + index * 30))
-                                .opacity(0.7 - Double(index) * 0.2)
-                        }
+            VStack(spacing: 24) {
+                // Breathing icon
+                ZStack {
+                    ForEach(0..<3) { index in
+                        Circle()
+                            .stroke(
+                                Color(red: 0.024, green: 0.714, blue: 0.831),
+                                lineWidth: 2
+                            )
+                            .frame(width: CGFloat(80 + index * 30), height: CGFloat(80 + index * 30))
+                            .opacity(0.7 - Double(index) * 0.2)
                     }
-                    .frame(height: 140)
-
-                    // Title
-                    Text("Breathe")
-                        .font(.system(size: 36, weight: .medium))
-                        .foregroundColor(Color(red: 0.122, green: 0.161, blue: 0.216))
-
-                    // Subtitle
-                    Text("Find your calm through guided breathing")
-                        .font(.system(size: 18))
-                        .foregroundColor(Color(red: 0.42, green: 0.447, blue: 0.502))
-                        .multilineTextAlignment(.center)
-
-                    // Instructions
-                    Text("Box breathing: Inhale • Hold • Exhale • Hold")
-                        .font(.system(size: 16))
-                        .foregroundColor(Color(red: 0.42, green: 0.447, blue: 0.502))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 40)
                 }
-                .padding(40)
-                .frame(maxWidth: 512)
-                .background(Color.white.opacity(0.9))
-                .cornerRadius(24)
-                .shadow(color: Color.black.opacity(0.1), radius: 12, x: 0, y: 4)
+                .frame(height: 140)
 
-                // Cycle selector
-                CycleDropdownView(selectedCycles: $selectedCycles)
+                // Title
+                Text("Breathe")
+                    .font(.system(size: 36, weight: .medium))
+                    .foregroundColor(Color(red: 0.122, green: 0.161, blue: 0.216))
+
+                // Subtitle
+                Text("Find your calm through guided breathing")
+                    .font(.system(size: 18))
+                    .foregroundColor(Color(red: 0.42, green: 0.447, blue: 0.502))
+                    .multilineTextAlignment(.center)
+
+                // Instructions
+                Text("Box breathing: Inhale • Hold • Exhale • Hold")
+                    .font(.system(size: 16))
+                    .foregroundColor(Color(red: 0.42, green: 0.447, blue: 0.502))
+                    .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
+            }
+            .padding(40)
+            .frame(maxWidth: 512)
+            .background(Color.white.opacity(0.9))
+            .cornerRadius(24)
+            .shadow(color: Color.black.opacity(0.1), radius: 12, x: 0, y: 4)
 
-                // Begin button
-                Button(action: startBreathing) {
-                    Text("Begin Session")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: 512)
-                        .padding(.vertical, 16)
-                        .background(Color(red: 0.024, green: 0.714, blue: 0.831))
-                        .cornerRadius(12)
-                        .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
-                }
-                .buttonStyle(PlainButtonStyle())
+            // Cycle selector
+            CycleDropdownView(selectedCycles: $selectedCycles)
                 .padding(.horizontal, 40)
 
-                Spacer()
+            // Begin button
+            Button(action: startBreathing) {
+                Text("Begin Session")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: 512)
+                    .padding(.vertical, 16)
+                    .background(Color(red: 0.024, green: 0.714, blue: 0.831))
+                    .cornerRadius(12)
+                    .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 40)
+            .buttonStyle(PlainButtonStyle())
+            .padding(.horizontal, 40)
+
+            Spacer()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Active Breathing View
