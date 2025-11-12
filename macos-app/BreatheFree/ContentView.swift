@@ -48,7 +48,7 @@ struct ContentView: View {
 
     // MARK: - Idle View (Home Screen)
     private var idleView: some View {
-        VStack(spacing: 32) {
+        VStack(spacing: 24) {
             Spacer()
 
             VStack(spacing: 24) {
@@ -92,6 +92,7 @@ struct ContentView: View {
 
             // Cycle selector
             CycleDropdownView(selectedCycles: $selectedCycles)
+                .frame(maxWidth: 512)
                 .padding(.horizontal, 40)
 
             // Begin button
