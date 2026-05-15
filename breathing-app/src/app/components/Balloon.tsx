@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 type BalloonProps = {
   breathingState: 'idle' | 'pre-start' | 'in' | 'hold-in' | 'out' | 'hold-out' | 'completed';
@@ -9,114 +9,63 @@ type BalloonProps = {
 };
 
 const Balloon = ({ breathingState, countdown, prompt }: BalloonProps) => {
-  const [displayText, setDisplayText] = useState(prompt);
-  const [displayCountdown, setDisplayCountdown] = useState(countdown);
-  const [textOpacity, setTextOpacity] = useState(1);
-  const [previousBreathingState, setPreviousBreathingState] = useState(breathingState);
-  const [, setScale] = useState(1);
-
-  // Update countdown and text on any change
-  useEffect(() => {
-    let timeoutId: NodeJS.Timeout | null = null;
-    let isCancelled = false;
-
-    const updateText = () => {
-      if (!isCancelled) {
-        // Update scale state
-        setScale((prevScale) => {
-          switch (breathingState) {
-            case 'in':
-            case 'hold-in':
-              return 2;
-            case 'out':
-            case 'hold-out':
-              return 1;
-            default:
-              return prevScale;
-          }
-        });
-        
-        // Update text
-        setDisplayText(prompt);
-        
-        // Update countdown only if necessary
-        Promise.resolve().then(() => {
-          if (!isCancelled && countdown !== displayCountdown) {
-            setDisplayCountdown(countdown);
-          }
-        });
-        
-        // Fade in text
-        setTextOpacity(1);
-
-        // Update previous state
-        setPreviousBreathingState(breathingState);
-      }
-    };
-
-    // Update text only when breathing state changes
-    if (breathingState !== previousBreathingState) {
-      // Fade out text using microtask to prevent synchronous state update
-      Promise.resolve().then(() => {
-        if (!isCancelled) {
-          setTextOpacity(0);
-
-          // After fade out, update text and fade in
-          timeoutId = setTimeout(updateText, 200);
-        }
-      });
-    } else if (countdown !== displayCountdown) {
-      // Update countdown if changed and no state transition
-      Promise.resolve().then(() => {
-        if (!isCancelled) {
-          setDisplayCountdown(countdown);
-        }
-      });
-    }
-
-    return () => {
-      isCancelled = true;
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, [breathingState, prompt, countdown, displayCountdown, previousBreathingState]);
-
-  const balloonClasses = {
-    'idle': 'bg-white',
-    'pre-start': 'bg-cyan-500',
-    'in': 'bg-cyan-500',
-    'hold-in': 'bg-cyan-500',
-    'out': 'bg-cyan-500',
-    'hold-out': 'bg-cyan-500',
-    'completed': 'bg-cyan-500',
-  }[breathingState];
+  const balloonVariants = {
+    idle: { scale: 1, backgroundColor: '#ffffff' },
+    'pre-start': { scale: 1, backgroundColor: '#06b6d4' },
+    in: { scale: 2, backgroundColor: '#06b6d4' },
+    'hold-in': { scale: 2, backgroundColor: '#06b6d4' },
+    out: { scale: 1, backgroundColor: '#06b6d4' },
+    'hold-out': { scale: 1, backgroundColor: '#06b6d4' },
+    completed: { scale: 1, backgroundColor: '#06b6d4' },
+  };
 
   return (
-    <div
-      className={`relative flex h-64 w-64 items-center justify-center rounded-full transition-transform duration-[4000ms] ease-in-out sm:h-64 sm:w-64 ${balloonClasses}`}
-      style={{ 
-        transform: ['in', 'hold-in'].includes(breathingState) ? `scale(2)` : 
-                   ['out', 'hold-out'].includes(breathingState) ? `scale(1)` : 
-                   breathingState === 'completed' ? `scale(1)` : 
-                   `scale(1)` 
+    <motion.div
+      variants={balloonVariants}
+      animate={breathingState}
+      transition={{
+        duration: 4,
+        ease: "easeInOut",
+        backgroundColor: { duration: 0.5 }
       }}
+      className="relative flex h-64 w-64 items-center justify-center rounded-full shadow-2xl sm:h-64 sm:w-64"
     >
-      <div className="absolute flex flex-col items-center justify-center text-center">
-        <span
-          className={`text-2xl font-bold transition-opacity duration-300 ease-in-out ${['idle', 'completed'].includes(breathingState) ? 'text-gray-800' : 'text-white'} sm:text-2xl text-center`}
-          style={{ opacity: textOpacity }}
-        >
-          {displayText}
-        </span>
-        {breathingState !== 'completed' && (
-          <span 
-            className={`text-5xl font-bold transition-opacity duration-300 ease-in-out ${['idle', 'completed'].includes(breathingState) ? 'text-gray-800' : 'text-white'} sm:text-5xl`}
-            style={{ opacity: textOpacity }}
+      <div className="absolute flex flex-col items-center justify-center text-center px-4">
+        <AnimatePresence mode="wait">
+          <motion.span
+            key={prompt}
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -5 }}
+            transition={{ duration: 0.3 }}
+            className={`text-2xl font-bold ${['idle', 'completed'].includes(breathingState) ? 'text-gray-800' : 'text-white'} text-center`}
           >
-            {displayCountdown}
-          </span>
+            {prompt}
+          </motion.span>
+        </AnimatePresence>
+
+        {breathingState !== 'completed' && breathingState !== 'idle' && (
+          <motion.span
+            key={countdown}
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className={`text-5xl font-bold ${['idle', 'completed'].includes(breathingState) ? 'text-gray-800' : 'text-white'}`}
+          >
+            {countdown}
+          </motion.span>
         )}
       </div>
-    </div>
+
+      {/* Decorative pulse effect when holding */}
+      {(breathingState === 'hold-in' || breathingState === 'hold-out') && (
+        <motion.div
+          className="absolute inset-0 rounded-full border-4 border-white/30"
+          initial={{ scale: 1, opacity: 0.5 }}
+          animate={{ scale: 1.1, opacity: 0 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "easeOut" }}
+        />
+      )}
+    </motion.div>
   );
 };
 
