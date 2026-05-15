@@ -1,4 +1,7 @@
+"use client";
+
 import Image from 'next/image';
+import { motion } from 'framer-motion';
 
 interface Cloud {
   id: number;
@@ -22,33 +25,34 @@ const clouds: Cloud[] = [
   { id: 8, left: '112%', top: '10%', size: 200, duration: 24, delay: 18, rotation: -15, opacity: 0.6 },
   { id: 9, left: '-12%', top: '80%', size: 320, duration: 29, delay: 6, rotation: 18, opacity: 0.68 },
   { id: 10, left: '108%', top: '55%', size: 150, duration: 20, delay: 14, rotation: -8, opacity: 0.48 },
-  { id: 11, left: '-16%', top: '35%', size: 290, duration: 27, delay: 4, rotation: -12, opacity: 0.62 },
-  { id: 12, left: '113%', top: '60%', size: 220, duration: 31, delay: 11, rotation: 10, opacity: 0.58 },
-  { id: 13, left: '-14%', top: '8%', size: 360, duration: 33, delay: 7, rotation: 6, opacity: 0.72 },
-  { id: 14, left: '107%', top: '42%', size: 190, duration: 23, delay: 16, rotation: -18, opacity: 0.52 },
-  { id: 15, left: '-22%', top: '70%', size: 400, duration: 36, delay: 2, rotation: 14, opacity: 0.78 },
-  { id: 16, left: '111%', top: '25%', size: 170, duration: 21, delay: 13, rotation: -5, opacity: 0.47 },
-  { id: 17, left: '-11%', top: '90%', size: 260, duration: 25, delay: 9, rotation: 20, opacity: 0.66 },
-  { id: 18, left: '109%', top: '5%', size: 340, duration: 34, delay: 17, rotation: -7, opacity: 0.74 },
-  { id: 19, left: '-19%', top: '58%', size: 210, duration: 28, delay: 1, rotation: 16, opacity: 0.56 },
-  { id: 20, left: '114%', top: '82%', size: 300, duration: 30, delay: 19, rotation: -14, opacity: 0.7 },
 ];
 
 export default function CloudBackground() {
   return (
     <div className="fixed inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }}>
       {clouds.map((cloud) => (
-        <div
+        <motion.div
           key={cloud.id}
           className="absolute"
+          initial={{
+            x: cloud.left.startsWith('-') ? '-20%' : '120%',
+            y: cloud.top,
+            rotate: cloud.rotation,
+            opacity: 0
+          }}
+          animate={{
+            x: cloud.left.startsWith('-') ? '120vw' : '-20vw',
+            opacity: cloud.opacity
+          }}
+          transition={{
+            duration: cloud.duration,
+            repeat: Infinity,
+            delay: cloud.delay,
+            ease: "linear"
+          }}
           style={{
-            left: cloud.left,
-            top: cloud.top,
             width: `${cloud.size}px`,
             height: `${cloud.size / 2}px`,
-            animation: `floatCloud${cloud.id} ${cloud.duration}s linear ${cloud.delay}s infinite`,
-            transform: `rotate(${cloud.rotation}deg)`,
-            opacity: cloud.opacity,
           }}
         >
           <Image
@@ -57,9 +61,8 @@ export default function CloudBackground() {
             width={cloud.size}
             height={cloud.size / 2}
             priority={cloud.id <= 3}
-            loading={cloud.id <= 3 ? "eager" : "lazy"}
           />
-        </div>
+        </motion.div>
       ))}
     </div>
   );
