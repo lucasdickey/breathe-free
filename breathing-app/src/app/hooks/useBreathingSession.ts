@@ -57,8 +57,6 @@ export function useBreathingSession() {
 
   const volumeRef = useRef(volume);
   const mutedRef = useRef(isMuted);
-  volumeRef.current = volume;
-  mutedRef.current = isMuted;
 
   const getContext = useCallback((): AudioContext | null => {
     if (typeof window === 'undefined') return null;
@@ -229,8 +227,12 @@ export function useBreathingSession() {
     setSnapshot(IDLE_SNAPSHOT);
   }, [stopAudio, stopTicker]);
 
-  // Keep the gain node in step with volume / mute.
+  // Keep the gain node - and the refs the audio graph reads from - in step
+  // with volume / mute. Mirroring into refs happens here rather than during
+  // render, so concurrent re-renders can never leave the graph mid-update.
   useEffect(() => {
+    volumeRef.current = volume;
+    mutedRef.current = isMuted;
     const ctx = audioCtxRef.current;
     const gain = masterGainRef.current;
     if (ctx && gain) {
