@@ -1,122 +1,41 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import Balloon from './components/Balloon';
 import AudioControls from './components/AudioControls';
 import CloudBackground from './components/CloudBackground';
 import CycleDropdown from './components/CycleDropdown';
-import { useAudio } from './hooks/useAudio';
+import { useBreathingSession, BreathingPhase, CYCLE_SECONDS } from './hooks/useBreathingSession';
 import { motion, AnimatePresence } from 'framer-motion';
-
-type BreathingState = 'idle' | 'pre-start' | 'in' | 'hold-in' | 'out' | 'hold-out' | 'completed';
 
 const defaultPrompts: { [key: string]: string } = {
   'idle': '',
   'pre-start': 'Settle your mind',
   'in': 'Breathe in',
-  'hold_in': 'Hold',
+  'hold-in': 'Hold',
   'out': 'Breathe out',
-  'hold_out': 'Hold',
+  'hold-out': 'Hold',
   'completed': 'Be easy, breathe deeply',
 };
 
 export default function Home() {
   const [cycles, setCycles] = useState(6);
-  const [breathingState, setBreathingState] = useState<BreathingState>('idle');
-  const [countdown, setCountdown] = useState(0);
-  const [currentCycle, setCurrentCycle] = useState(0);
-  const [totalDuration, setTotalDuration] = useState(0);
   const [mood, setMood] = useState('');
   const [prompts, setPrompts] = useState(defaultPrompts);
   const [isLoadingPrompts, setIsLoadingPrompts] = useState(false);
 
-  // Audio management
-  const { volume, isMuted, toggleMute, updateVolume } = useAudio(breathingState);
-
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout | null = null;
-    let isCancelled = false;
-
-    const checkCompletion = () => {
-      if (currentCycle >= cycles && breathingState !== 'pre-start' && !isCancelled) {
-        // Use a microtask to update state safely
-        Promise.resolve().then(() => {
-          if (!isCancelled) {
-            setBreathingState('completed');
-            setCurrentCycle(0);
-          }
-        });
-        return true;
-      }
-      return false;
-    };
-
-    // Start interval only if not idle
-    if (breathingState !== 'idle') {
-      // Check initial completion before starting interval
-      if (checkCompletion()) {
-        return () => { isCancelled = true; };
-      }
-
-      // Start interval
-      intervalId = setInterval(() => {
-        // Only start total duration tracking after first breath loop
-        if (breathingState !== 'pre-start') {
-          setTotalDuration((prev) => prev + 1);
-        }
-        
-        setCountdown((prevCountdown) => {
-          if (prevCountdown > 1) {
-            return prevCountdown - 1;
-          }
-
-          switch (breathingState) {
-            case 'pre-start':
-              setBreathingState('in');
-              return 4;
-            case 'in':
-              setBreathingState('hold-in');
-              return 4;
-            case 'hold-in':
-              setBreathingState('out');
-              return 4;
-            case 'out':
-              setBreathingState('hold-out');
-              return 4;
-            case 'hold-out':
-              const newCycle = currentCycle + 1;
-              setCurrentCycle(newCycle);
-              if (newCycle < cycles) {
-                setBreathingState('in');
-              } else {
-                // Use a microtask to update state safely
-                Promise.resolve().then(() => {
-                  if (!isCancelled) {
-                    setBreathingState('completed');
-                  }
-                });
-              }
-              return 4;
-            default:
-              return 0;
-          }
-        });
-
-        // Check for completion after state updates
-        checkCompletion();
-      }, 1000);
-    }
-
-    // Cleanup function
-    return () => {
-      isCancelled = true;
-      if (intervalId) clearInterval(intervalId);
-      if (breathingState === 'idle') {
-        setTotalDuration(0);
-      }
-    };
-  }, [breathingState, cycles, currentCycle]);
-
+  const {
+    phase,
+    countdown,
+    remainingSeconds,
+    start,
+    stop,
+    reset,
+    volume,
+    isMuted,
+    toggleMute,
+    updateVolume,
+  } = useBreathingSession();
 
   const startExercise = async () => {
     setIsLoadingPrompts(true);
@@ -131,9 +50,9 @@ export default function Home() {
         setPrompts({
           ...defaultPrompts,
           'in': data.in,
-          'hold_in': data.hold_in,
+          'hold-in': data.hold_in,
           'out': data.out,
-          'hold_out': data.hold_out,
+          'hold-out': data.hold_out,
           'completed': data.completed,
         });
       } else {
@@ -144,44 +63,32 @@ export default function Home() {
       setPrompts(defaultPrompts);
     } finally {
       setIsLoadingPrompts(false);
-      setCurrentCycle(0);
-      setBreathingState('pre-start');
-      setCountdown(8);
-      setTotalDuration(0);
+      start(cycles);
     }
   };
 
-  const stopExercise = () => {
-    setBreathingState('idle');
-    setCurrentCycle(0);
-    setTotalDuration(0);
-  };
-
   const mainContainerClasses =
-    breathingState === 'idle' || breathingState === 'completed'
+    phase === 'idle' || phase === 'completed'
       ? 'flex w-full max-w-lg flex-col items-center justify-center rounded-3xl bg-gradient-to-b from-white/90 to-blue-50/90 backdrop-blur-xl p-10 shadow-2xl sm:p-12 relative z-10 border border-white/50'
       : 'flex w-full flex-col items-center justify-center min-h-screen relative z-10';
 
   const topContainerClasses =
     'flex min-h-screen flex-col items-center justify-center p-4 bg-gradient-to-br from-[#f0f9ff] via-[#e6f2ff] to-[#cce6ff]';
 
-  // Calculate total session duration and remaining time
-  const totalSessionDuration = cycles * 16; // 4 seconds * 4 phases * number of cycles
-  const remainingTime = totalSessionDuration - totalDuration;
-  const minutesRemaining = Math.floor(remainingTime / 60);
-  const secondsRemaining = remainingTime % 60;
+  const minutesRemaining = Math.floor(remainingSeconds / 60);
+  const secondsRemaining = remainingSeconds % 60;
 
-  const getPrompt = useCallback((state: BreathingState) => {
-    const key = state.replace('-', '_');
-    return prompts[key] || prompts[state] || '';
-  }, [prompts]);
+  const getPrompt = useCallback(
+    (state: BreathingPhase) => prompts[state] || '',
+    [prompts]
+  );
 
   return (
     <div className={topContainerClasses}>
       <CloudBackground />
       <main className={mainContainerClasses}>
         <AnimatePresence mode="wait">
-          {breathingState === 'idle' ? (
+          {phase === 'idle' ? (
             <motion.div
               key="idle"
               initial={{ opacity: 0, y: 20 }}
@@ -228,7 +135,7 @@ export default function Home() {
                     Number of cycles
                   </label>
                   <span className="text-sm text-gray-500 font-medium">
-                    {`${Math.floor(cycles * 16 / 60)}:${(cycles * 16 % 60).toString().padStart(2, '0')} total`}
+                    {`${Math.floor(cycles * CYCLE_SECONDS / 60)}:${(cycles * CYCLE_SECONDS % 60).toString().padStart(2, '0')} total`}
                   </span>
                 </div>
                 <CycleDropdown value={cycles} onChange={setCycles} />
@@ -245,7 +152,7 @@ export default function Home() {
                 Box breathing: Inhale • Hold • Exhale • Hold
               </p>
             </motion.div>
-          ) : breathingState === 'completed' ? (
+          ) : phase === 'completed' ? (
             <motion.div
               key="completed"
               initial={{ opacity: 0, scale: 0.9 }}
@@ -253,10 +160,10 @@ export default function Home() {
               className="flex flex-col items-center"
             >
               <div className="mt-8">
-                <Balloon breathingState={breathingState} countdown={0} prompt={getPrompt(breathingState)} />
+                <Balloon breathingState={phase} countdown={0} prompt={getPrompt(phase)} />
               </div>
               <button
-                onClick={() => setBreathingState('idle')}
+                onClick={reset}
                 className="mt-8 w-full max-w-xs rounded-xl bg-cyan-500 px-6 py-3 text-xl font-semibold text-white shadow-lg shadow-cyan-500/30 transition-transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
               >
                 Back to Start
@@ -273,7 +180,7 @@ export default function Home() {
               <div className="absolute top-4 right-4 flex flex-col items-end gap-2 z-20">
                 <div className="flex items-center bg-white/80 backdrop-blur-sm rounded-full px-4 py-2 shadow-md">
                   <button
-                    onClick={stopExercise}
+                    onClick={stop}
                     className="mr-3 text-gray-600 hover:text-gray-900"
                     aria-label="Stop breathing exercise"
                   >
@@ -293,7 +200,7 @@ export default function Home() {
                 />
               </div>
               <div className="mt-8">
-                <Balloon breathingState={breathingState} countdown={countdown} prompt={getPrompt(breathingState)} />
+                <Balloon breathingState={phase} countdown={countdown} prompt={getPrompt(phase)} />
               </div>
             </motion.div>
           )}

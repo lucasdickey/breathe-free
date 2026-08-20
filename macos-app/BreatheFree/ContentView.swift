@@ -216,8 +216,10 @@ struct ContentView: View {
         countdown = breathingState.duration
         currentCycle = 1
         totalDuration = 0
-        // Calculate total session duration: 8 seconds pre-start + (4*4 seconds per cycle)
-        sessionDuration = 8 + (selectedCycles * 16)
+        // Breathing time only (4*4 seconds per cycle); totalDuration doesn't
+        // count the pre-start settle, so including it here left the timer
+        // stuck showing 0:08 at the end of every session.
+        sessionDuration = selectedCycles * 16
 
         // Trigger initial haptic
         HapticManager.shared.triggerHaptic(for: .preStart)

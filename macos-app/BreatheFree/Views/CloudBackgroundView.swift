@@ -81,7 +81,9 @@ struct CloudAnimationModifier: ViewModifier {
     let delay: Double
     let yOffset: CGFloat
 
-    @State private var offset: CGFloat = 0
+    // Offsets are relative to the ZStack center, so the sweep must span both
+    // halves of the window; starting at 0 kept clouds in the right half only.
+    @State private var offset: CGFloat = -800
 
     func body(content: Content) -> some View {
         content
@@ -92,7 +94,7 @@ struct CloudAnimationModifier: ViewModifier {
                     .repeatForever(autoreverses: false)
                     .delay(delay)
                 ) {
-                    offset = 1600 // Move from left edge (0) to right edge and beyond
+                    offset = 800 // Off-screen left, across the window, off-screen right
                 }
             }
     }

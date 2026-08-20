@@ -19,12 +19,16 @@ const Balloon = ({ breathingState, countdown, prompt }: BalloonProps) => {
     completed: { scale: 1, backgroundColor: '#06b6d4' },
   };
 
+  // Only inhale/exhale sweep the full 4-second phase; entering a hold (or
+  // stopping) should settle quickly instead of dragging a stale 4s tween.
+  const scaleDuration = breathingState === 'in' || breathingState === 'out' ? 4 : 0.4;
+
   return (
     <motion.div
       variants={balloonVariants}
       animate={breathingState}
       transition={{
-        duration: 4,
+        duration: scaleDuration,
         ease: "easeInOut",
         backgroundColor: { duration: 0.5 }
       }}
