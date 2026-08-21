@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
 
 type BalloonProps = {
   breathingState: 'idle' | 'pre-start' | 'in' | 'hold-in' | 'out' | 'hold-out' | 'completed';
@@ -64,10 +64,14 @@ const Balloon = ({ breathingState, countdown, prompt }: BalloonProps) => {
   // Animate scale based on breathing state
   useEffect(() => {
     const targetScale = ['in', 'hold-in'].includes(breathingState) ? 2 : 1;
+    // Only the inhale and exhale sweep the full 4s phase. Entering a hold (or
+    // stopping) should settle promptly instead of dragging a stale 4s tween.
+    const duration = breathingState === 'in' || breathingState === 'out' ? 4000 : 400;
 
     Animated.timing(scale, {
       toValue: targetScale,
-      duration: 4000,
+      duration,
+      easing: Easing.inOut(Easing.ease),
       useNativeDriver: true,
     }).start();
   }, [breathingState]);

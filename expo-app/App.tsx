@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   View,
   Text,
@@ -13,13 +13,11 @@ import Balloon from './components/Balloon';
 import AudioControls from './components/AudioControls';
 import CloudBackground from './components/CloudBackground';
 import CycleDropdown from './components/CycleDropdown';
-import { useAudio } from './hooks/useAudio';
+import { useBreathingSession, BreathingPhase, CYCLE_SECONDS } from './hooks/useBreathingSession';
 import { useHaptics } from './hooks/useHaptics';
 import Svg, { Circle, Path } from 'react-native-svg';
 
-type BreathingState = 'idle' | 'pre-start' | 'in' | 'hold-in' | 'out' | 'hold-out' | 'completed';
-
-const promptMap: { [key in BreathingState]: string } = {
+const promptMap: { [key in BreathingPhase]: string } = {
   'idle': '',
   'pre-start': 'Settle your mind',
   'in': 'Breathe in',
@@ -46,112 +44,30 @@ const CloseIcon = () => (
 
 export default function App() {
   const [cycles, setCycles] = useState(6);
-  const [breathingState, setBreathingState] = useState<BreathingState>('idle');
-  const [countdown, setCountdown] = useState(0);
-  const [currentCycle, setCurrentCycle] = useState(0);
-  const [totalDuration, setTotalDuration] = useState(0);
 
-  // Audio management (disabled - to be fixed later)
-  // const { volume, isMuted, toggleMute, updateVolume } = useAudio(breathingState);
+  const {
+    phase,
+    countdown,
+    remainingSeconds,
+    start,
+    stop,
+    volume,
+    isMuted,
+    toggleMute,
+    updateVolume,
+  } = useBreathingSession();
 
-  // Haptic feedback
-  useHaptics(breathingState);
+  // Haptics follow the phase the engine reports, so they land on the same
+  // boundaries as the visuals and the audio loop.
+  useHaptics(phase);
 
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout | null = null;
-    let isCancelled = false;
+  const startExercise = () => start(cycles);
+  const stopExercise = () => stop();
 
-    const checkCompletion = () => {
-      if (currentCycle >= cycles && breathingState !== 'pre-start' && !isCancelled) {
-        Promise.resolve().then(() => {
-          if (!isCancelled) {
-            setBreathingState('completed');
-            setCurrentCycle(0);
-          }
-        });
-        return true;
-      }
-      return false;
-    };
+  const minutesRemaining = Math.floor(remainingSeconds / 60);
+  const secondsRemaining = remainingSeconds % 60;
 
-    if (breathingState !== 'idle') {
-      if (checkCompletion()) {
-        return () => { isCancelled = true; };
-      }
-
-      intervalId = setInterval(() => {
-        if (breathingState !== 'pre-start') {
-          setTotalDuration((prev) => prev + 1);
-        }
-
-        setCountdown((prevCountdown) => {
-          if (prevCountdown > 1) {
-            return prevCountdown - 1;
-          }
-
-          switch (breathingState) {
-            case 'pre-start':
-              setBreathingState('in');
-              return 4;
-            case 'in':
-              setBreathingState('hold-in');
-              return 4;
-            case 'hold-in':
-              setBreathingState('out');
-              return 4;
-            case 'out':
-              setBreathingState('hold-out');
-              return 4;
-            case 'hold-out':
-              const newCycle = currentCycle + 1;
-              setCurrentCycle(newCycle);
-              if (newCycle < cycles) {
-                setBreathingState('in');
-              } else {
-                Promise.resolve().then(() => {
-                  if (!isCancelled) {
-                    setBreathingState('completed');
-                  }
-                });
-              }
-              return 4;
-            default:
-              return 0;
-          }
-        });
-
-        checkCompletion();
-      }, 1000);
-    }
-
-    return () => {
-      isCancelled = true;
-      if (intervalId) clearInterval(intervalId);
-      if (breathingState === 'idle') {
-        setTotalDuration(0);
-      }
-    };
-  }, [breathingState, cycles, currentCycle]);
-
-  const startExercise = () => {
-    setCurrentCycle(0);
-    setBreathingState('pre-start');
-    setCountdown(8);
-    setTotalDuration(0);
-  };
-
-  const stopExercise = () => {
-    setBreathingState('idle');
-    setCurrentCycle(0);
-    setTotalDuration(0);
-  };
-
-  const totalSessionDuration = cycles * 16;
-  const remainingTime = totalSessionDuration - totalDuration;
-  const minutesRemaining = Math.floor(remainingTime / 60);
-  const secondsRemaining = remainingTime % 60;
-
-  const isActiveState = breathingState !== 'idle' && breathingState !== 'completed';
+  const isActiveState = phase !== 'idle' && phase !== 'completed';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -177,19 +93,18 @@ export default function App() {
                   {`${minutesRemaining.toString().padStart(2, '0')}:${secondsRemaining.toString().padStart(2, '0')}`}
                 </Text>
               </View>
-              {/* AudioControls disabled - audio to be fixed later */}
-              {/* <AudioControls
+              <AudioControls
                 volume={volume}
                 isMuted={isMuted}
                 onToggleMute={toggleMute}
                 onVolumeChange={updateVolume}
-              /> */}
+              />
             </View>
             <View style={styles.balloonWrapper}>
               <Balloon
-                breathingState={breathingState}
+                breathingState={phase}
                 countdown={countdown}
-                prompt={promptMap[breathingState]}
+                prompt={promptMap[phase]}
               />
             </View>
           </View>
@@ -199,7 +114,7 @@ export default function App() {
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.idleContainer}>
-              {breathingState === 'idle' ? (
+              {phase === 'idle' ? (
                 <>
                   <View style={styles.iconContainer}>
                     <BreathIcon />
@@ -210,6 +125,9 @@ export default function App() {
                   <View style={styles.cycleSection}>
                     <Text style={styles.cycleLabel}>
                       Number of cycles
+                      <Text style={styles.cycleTotal}>
+                        {`   ${Math.floor((cycles * CYCLE_SECONDS) / 60)}:${((cycles * CYCLE_SECONDS) % 60).toString().padStart(2, '0')} total`}
+                      </Text>
                     </Text>
                     <CycleDropdown value={cycles} onChange={setCycles} />
                   </View>
@@ -229,13 +147,13 @@ export default function App() {
                 <>
                   <View style={styles.balloonWrapper}>
                     <Balloon
-                      breathingState={breathingState}
+                      breathingState={phase}
                       countdown={0}
-                      prompt={promptMap[breathingState]}
+                      prompt={promptMap[phase]}
                     />
                   </View>
                   <TouchableOpacity
-                    onPress={() => setBreathingState('idle')}
+                    onPress={stopExercise}
                     style={styles.backButton}
                   >
                     <Text style={styles.backButtonText}>Back to Start</Text>
@@ -345,6 +263,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 12,
     textAlign: 'center',
+  },
+  cycleTotal: {
+    fontSize: 14,
+    fontWeight: 'normal',
+    color: '#6b7280',
   },
   startButton: {
     width: '100%',

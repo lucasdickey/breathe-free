@@ -9,7 +9,9 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@react-native-community/slider": "5.0.1",
     "expo": "~54.0.23",
+    "expo-audio": "~1.1.1",
     "expo-haptics": "^15.0.7",
     "expo-linear-gradient": "^15.0.7",
     "expo-status-bar": "~3.0.8",
