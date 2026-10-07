@@ -76,8 +76,8 @@ on it, but it won't install over a release-signed build.
 Before publishing an APK, check its certificate:
 
 ```bash
-apksigner verify --print-certs app-release.apk
-# Signer #1 certificate SHA-256 digest: 70adf95509f77edc47a81b0b8305955f784d87647f81bdc73f00078d40e632ae
+apksigner verify --print-certs app-release.apk | grep 'SHA-256 digest'
+# ...certificate SHA-256 digest: 70adf95509f77edc47a81b0b8305955f784d87647f81bdc73f00078d40e632ae
 ```
 
 ### Screenshots without a device

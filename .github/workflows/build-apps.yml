@@ -91,13 +91,20 @@ jobs:
         working-directory: android-app
         run: ./gradlew --no-daemon testDebugUnitTest assembleRelease
 
+      # apksigner's wording changes between versions ("Signer #1 certificate SHA-256
+      # digest:" in 36, "V2 Signer: certificate SHA-256 digest:" in 37), so match only
+      # the end of the line, and stop if no certificate can be read at all.
       - name: Check the signing key
         working-directory: android-app
         run: |
           apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner"
           cert="$("$apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk \
-            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
-          echo "APK certificate SHA-256: $cert"
+            | sed -n 's/.*certificate SHA-256 digest: *//p' | sort -u)"
+          echo "APK certificate SHA-256 ($apksigner): $cert"
+          if [ -z "$cert" ]; then
+            echo "::error::Couldn't read the APK's signing certificate."
+            exit 1
+          fi
           if [ -f keystore.properties ] && [ "$cert" != "$RELEASE_CERT_SHA256" ]; then
             echo "::error::The release key secrets are set, but the APK isn't signed with the release key."
             exit 1
