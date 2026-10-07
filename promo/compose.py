@@ -91,17 +91,6 @@ def frame_index_before(v):
     return int(np.ceil(v * FPS - 1e-9)) - 1
 
 
-def spring(t, response, damping):
-    """SwiftUI's spring(response:dampingFraction:), from rest at 0 towards 1, t seconds in."""
-    if t <= 0:
-        return 0.0
-    w0 = 2 * math.pi / response
-    if damping < 1:
-        wd = w0 * math.sqrt(1 - damping * damping)
-        return 1 - math.exp(-damping * w0 * t) * (math.cos(wd * t) + damping * w0 / wd * math.sin(wd * t))
-    return 1 - math.exp(-w0 * t) * (1 + w0 * t)
-
-
 def breath_level(v):
     """How full the lungs are at video time v, as the orb shows it (BreathTimeline.kt)."""
     t = v - LAG - SETTLE
@@ -121,13 +110,6 @@ def rounded_mask(w, h, r, scale=4):
     big = Image.new("L", (w * scale, h * scale), 0)
     ImageDraw.Draw(big).rounded_rectangle([0, 0, w * scale - 1, h * scale - 1], r * scale, fill=255)
     return big.resize((w, h), Image.LANCZOS)
-
-
-def disc_mask(size, radius, feather=1.5):
-    c = (size - 1) / 2
-    ys, xs = np.mgrid[0:size, 0:size]
-    d = np.hypot(xs - c, ys - c)
-    return Image.fromarray((np.clip((radius + feather - d) / feather, 0, 1) * 255).astype(np.uint8))
 
 
 def composite(canvas, img, x, y):
@@ -353,10 +335,9 @@ class Phone:
 # ------------------------------------------------------------------ Mac: a window and a pointer
 
 class MacHome:
-    """Where things are on the Mac home screen, measured from its frames, and what the still
-    renderer can't show: the volume slider (an AppKit control it leaves a placeholder for) and
-    the session-length circles moving. The circles are cut from the real frames and moved on
-    the springs CyclePicker uses."""
+    """Where things are on the Mac home screen, measured from its frames, and the one thing the
+    still renderer can't show: the volume slider, an AppKit control it leaves a placeholder for.
+    (Session length's motion it draws itself, from the moments in the script.)"""
 
     def __init__(self, load):
         closed = np.asarray(load(frame_index_before(TAPS["open"]) - 3), dtype=np.int32)
@@ -379,7 +360,6 @@ class MacHome:
             sys.exit("could not find session length and Begin in the Mac frames")
         self.cx, self.cy, self.r = circle
         self.step = (46 + 8) * self.pt  # CyclePicker: 46 point circles, 8 points apart
-        self.before = CHOICES.index(SCRIPT["cycles"]["before"])
         self.picked = CHOICES.index(SCRIPT["cycles"]["picked"])
         self.targets = {
             "open": (self.cx, self.cy),
@@ -390,23 +370,6 @@ class MacHome:
         ys, xs = np.nonzero(yellow)
         self.slider = (xs.min() - 2, ys.min() - 2, xs.max() + 3, ys.max() + 3) if len(xs) else None
         self.begin_probe = (int(begin[0] + 100 * self.pt), int(begin[1]))
-
-        # Every circle's look, from a frame with the row settled open (the count before the pick
-        # chosen), and the picked count chosen, from one settled after.
-        size = int(2 * (self.r + 3)) | 1
-        mask = disc_mask(size, self.r + 0.5)
-
-        def cut(img, x, y):
-            x0, y0 = round(x) - size // 2, round(y) - size // 2
-            patch = img.crop((x0, y0, x0 + size, y0 + size)).convert("RGBA")
-            patch.putalpha(mask)
-            return patch
-
-        opened = load(frame_index_before(TAPS["pick"]) - 2)
-        self.looks = [cut(opened, self.cx + self.slot(i), self.cy) for i in range(len(CHOICES))]
-        self.picked_look = cut(load(frame_index_before(TAPS["pick"]) + 12), self.cx, self.cy)
-        self.band = (round(self.cy - self.r - 2.5), round(self.cy + self.r + 2.5) + 1,
-                     round(self.cx - 2.5 * self.step - self.r - 14), round(self.cx + 2.5 * self.step + self.r + 14))
 
     def slot(self, i):
         return (i - (len(CHOICES) - 1) / 2) * self.step
@@ -433,49 +396,6 @@ class MacHome:
         d.ellipse([knob - r, cy - r + 1.5, knob + r, cy + r + 1.5], fill=(0, 0, 0, 55))
         d.ellipse([knob - r, cy - r, knob + r, cy + r], fill=(255, 255, 255, 255), outline=(0, 0, 0, 38))
         return img
-
-    def clear_row(self, frame):
-        """The frame with the row of circles taken out: the sky between the rows just above
-        and below it, eased into the frame at the row's ends."""
-        y0, y1, x0, x1 = self.band
-        a = np.asarray(frame, dtype=np.float32).copy()
-        t = np.linspace(0, 1, y1 - y0)[:, None, None]
-        fill = a[y0 - 1, x0:x1][None] * (1 - t) + a[y1, x0:x1][None] * t
-        edge = np.clip(np.minimum(np.arange(x1 - x0), np.arange(x1 - x0)[::-1]) / 12, 0, 1)[None, :, None]
-        a[y0:y1, x0:x1] = fill * edge + a[y0:y1, x0:x1] * (1 - edge)
-        return Image.fromarray(a.clip(0, 255).astype(np.uint8)).convert("RGBA")
-
-    def picker_motion(self, frame, v):
-        """Session length fanning out from the chosen circle when clicked, and folding into
-        the picked one: CyclePicker's springs, on the real circles."""
-        opening, picking = v - TAPS["open"], v - TAPS["pick"]
-        state = []  # (on top, x offset, scale, opacity, look)
-        if 0 <= opening < 0.9:
-            for i, look in enumerate(self.looks):
-                x = spring(opening - 0.028 * abs(i - self.before), 0.42, 0.68)
-                chosen = i == self.before
-                state.append((chosen, self.slot(i) * x, 1 if chosen else 0.55 + 0.45 * x,
-                              1 if chosen else clamp01(x), look))
-        elif 0 <= picking < 0.6:
-            x = spring(picking, 0.32, 1.0)
-            for i, look in enumerate(self.looks):
-                if i == self.picked:
-                    state.append((True, self.slot(i) * (1 - x), 1, 1, Image.blend(look, self.picked_look, x)))
-                else:
-                    state.append((False, self.slot(i) * (1 - x), 1 - 0.45 * x, clamp01(1 - x), look))
-        else:
-            return frame
-        img = self.clear_row(frame)
-        for _, dx, scale, alpha, look in sorted(state, key=lambda s: s[0]):
-            if alpha <= 0.004:
-                continue
-            if abs(scale - 1) > 1e-3:
-                n = max(3, round(look.width * scale))
-                look = look.resize((n, n), Image.LANCZOS)
-            look = faded(look, alpha)
-            img.alpha_composite(look, (round(self.cx + dx - look.width / 2), round(self.cy - look.height / 2)))
-        return img.convert("RGB")
-
 
 class MacWindow:
     """A Mac window around the app's frames: rounded, shadowed, with its three buttons. Built
@@ -664,7 +584,7 @@ class Edit:
         if k not in self.cache:
             img = self.load(k)
             if self.home and k / FPS < TAPS["begin"]:
-                img = self.home.picker_motion(self.home.fix_slider(img), k / FPS)
+                img = self.home.fix_slider(img)
             if len(self.cache) > 8:
                 self.cache.clear()
             self.cache[k] = img
