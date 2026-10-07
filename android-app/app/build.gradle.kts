@@ -13,13 +13,15 @@ android {
         applicationId = "com.breathefree.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "2.0"
+        versionCode = 3
+        versionName = "2.0.1"
     }
 
     // Release builds are signed with the key described in keystore.properties when that file
-    // exists (storeFile, storePassword, keyAlias, keyPassword), else with the debug key so a
-    // fresh checkout still produces an installable APK.
+    // exists (storeFile, storePassword, keyAlias, keyPassword): from 2.0.1, the app's permanent
+    // key, which CI writes from repository secrets (see README). Without the file they use the
+    // debug key, so a fresh checkout still produces an APK, but not one that installs over a
+    // release-signed build.
     val keystoreFile = rootProject.file("keystore.properties")
     signingConfigs {
         if (keystoreFile.exists()) {

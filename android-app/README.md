@@ -23,12 +23,14 @@ is generated as it plays. See `../macos-app/README.md` for the full description.
 
 ## Install
 
-Download `app-release.apk` (from the "Build apps" GitHub Actions run, or build it as
-below), copy it to the phone and open it. Android will ask you to allow installs from
-that app the first time.
+Download the APK from [one-off.dev/breathe-free](https://one-off.dev/breathe-free) (or
+`app-release.apk` from a "Build apps" run on `main`), copy it to the phone and open it.
+Android will ask you to allow installs from that app the first time.
 
-If the old Expo build is installed, uninstall it first: both use the package name
-`com.breathefree.app` but are signed with different keys.
+If Breathe Free 2.0 or earlier is installed (the Expo build, or the first native build),
+uninstall it first: those were signed with other keys, and Android won't install over an
+app signed with a different key. From 2.0.1 on, every build is signed with the app's
+permanent key (see [Signing](#signing)), so updates install over the top.
 
 Needs Android 8.0 or later.
 
@@ -43,18 +45,40 @@ cd android-app
 ./gradlew testDebugUnitTest    # timeline, sound and audio-thread tests
 ```
 
-Release builds are signed with the key in `keystore.properties` if that file exists:
+### Signing
+
+From 2.0.1, release builds are signed with the app's permanent key:
+
+- alias `breathe-free`, valid until 2054, certificate SHA-256
+  `70:AD:F9:55:09:F7:7E:DC:47:A8:1B:0B:83:05:95:5F:78:4D:87:64:7F:81:BD:C7:3F:00:07:8D:40:E6:32:AE`
+- not in this repository: GitHub holds it as two repository secrets,
+  `ANDROID_KEYSTORE_BASE64` (the `.p12` key file as base64) and
+  `ANDROID_KEYSTORE_PASSWORD`, and Lucas keeps the original.
+
+"Build apps" writes the key from those secrets before building, and fails if the APK
+comes out with any other certificate. Without the secrets it still builds, signed with a
+throwaway key, and says so in a warning. So the APK to publish is the one from a run on
+`main` with no such warning.
+
+To sign a local build instead, describe the key in `keystore.properties` (ignored by git).
+The key password is the same as the store password, since a `.p12` file has only one:
 
 ```properties
-storeFile=release.jks
+storeFile=/path/to/breathe-free-release.p12
 storePassword=...
-keyAlias=...
+keyAlias=breathe-free
 keyPassword=...
 ```
 
-Otherwise they use the debug key, which is fine for installing on your own phone.
-Keep using the same key from then on, or each new build will need the app uninstalled
-first.
+Without that file a local build uses the debug key: fine on a phone with no Breathe Free
+on it, but it won't install over a release-signed build.
+
+Before publishing an APK, check its certificate:
+
+```bash
+apksigner verify --print-certs app-release.apk | grep 'SHA-256 digest'
+# ...certificate SHA-256 digest: 70adf95509f77edc47a81b0b8305955f784d87647f81bdc73f00078d40e632ae
+```
 
 ### Screenshots without a device
 
