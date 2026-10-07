@@ -7,26 +7,27 @@ import SwiftUI
 
 struct DoneView: View {
     @ObservedObject var model: SessionModel
+    @Environment(\.ink) private var ink
 
     var body: some View {
         let cycles = model.session?.plan.cycles ?? model.cycles
         VStack(spacing: 0) {
-            AmbientOrb(colors: .night, period: 12, depth: 0.6)
+            AmbientOrb(colors: ink.orb, period: 12, depth: 0.6)
                 .frame(width: 140, height: 140)
             Text("Well done")
                 .font(.system(size: 34, weight: .light))
-                .foregroundColor(.white)
+                .foregroundColor(ink.deep.color)
                 .padding(.top, 10)
             Text("Be easy. Breathe deeply.")
                 .font(.system(size: 18))
-                .foregroundColor(.white.opacity(0.88))
+                .foregroundColor(ink.deep.color)
                 .padding(.top, 8)
             Text("\(cycles) cycles · \(clockText(cycles * Int(SessionPlan.cycleSeconds))) of box breathing")
                 .font(.system(size: 13))
-                .foregroundColor(.white.opacity(0.7))
+                .foregroundColor(ink.soft.color)
                 .padding(.top, 6)
             Button("Done", action: model.backHome)
-                .buttonStyle(PrimaryButtonStyle(light: true))
+                .buttonStyle(PrimaryButtonStyle())
                 .keyboardShortcut(.defaultAction)
                 .padding(.top, 36)
             Button("Breathe again", action: model.begin)

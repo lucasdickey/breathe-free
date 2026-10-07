@@ -1,5 +1,6 @@
 package com.breathefree.app.ui
 
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -12,87 +13,87 @@ import androidx.compose.ui.graphics.RadialGradientShader
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import kotlin.math.PI
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.sin
 
-/** Colours for one mood of the sky. "Lift" colours are where it brightens to on a full breath. */
-class SkyPalette(
+/** Colours for one moment of the sky ([DaySky] picks them from the clock). */
+@Immutable
+data class SkyPalette(
     val top: Color,
     val mid: Color,
     val bottom: Color,
-    val liftTop: Color = top,
-    val liftMid: Color = mid,
-    val liftBottom: Color = bottom,
     val cloud: Color,
     val cloudAlpha: Float,
+    /** How bright the stars are: 0 by day, 1 at night. */
+    val stars: Float = 0f,
 ) {
     fun mix(other: SkyPalette, t: Float) = SkyPalette(
         top = lerp(top, other.top, t),
         mid = lerp(mid, other.mid, t),
         bottom = lerp(bottom, other.bottom, t),
-        liftTop = lerp(liftTop, other.liftTop, t),
-        liftMid = lerp(liftMid, other.liftMid, t),
-        liftBottom = lerp(liftBottom, other.liftBottom, t),
         cloud = lerp(cloud, other.cloud, t),
         cloudAlpha = cloudAlpha + (other.cloudAlpha - cloudAlpha) * t,
+        stars = stars + (other.stars - stars) * t,
     )
 
-    companion object {
-        /** Home: a clear daytime sky. */
-        val Day = SkyPalette(
-            top = Color(0xFF9FCFF2), mid = Color(0xFFCBE6F8), bottom = Color(0xFFEEF7FD),
-            cloud = Color.White, cloudAlpha = 0.85f,
-        )
+    /** The sky's colour [y] of the way down the screen, blended as the gradient draws it. */
+    fun at(y: Float): Color =
+        if (y <= 0.5f) blend(top, mid, y / 0.5f) else blend(mid, bottom, (y - 0.5f) / 0.5f)
 
-        /** During a session: dusk, brightening a little as the lungs fill. */
-        val Dusk = SkyPalette(
-            top = Color(0xFF081A33), mid = Color(0xFF12375C), bottom = Color(0xFF23607F),
-            liftTop = Color(0xFF0E2A52), liftMid = Color(0xFF1C4F7E), liftBottom = Color(0xFF317C9B),
-            cloud = Color(0xFFAFC3E0), cloudAlpha = 0.30f,
-        )
-
-        /** Finished: first light. */
-        val Dawn = SkyPalette(
-            top = Color(0xFF1D3B66), mid = Color(0xFF5F86B5), bottom = Color(0xFFF0C9A9),
-            cloud = Color(0xFFFFE8DA), cloudAlpha = 0.55f,
-        )
-    }
+    private fun blend(a: Color, b: Color, t: Float) =
+        Color(a.red + (b.red - a.red) * t, a.green + (b.green - a.green) * t, a.blue + (b.blue - a.blue) * t)
 }
 
-/** Eases the sky from one palette to another over [seconds], restarting cleanly if retargeted mid-way. */
-class PaletteTransition(initial: SkyPalette, private val seconds: Double = 1.8) {
-    private var from = initial
-    private var to = initial
-    private var startNanos = 0L
-
-    fun retarget(target: SkyPalette, nowNanos: Long) {
-        if (target === to) return
-        from = at(nowNanos)
-        to = target
-        startNanos = nowNanos
-    }
-
-    fun at(nowNanos: Long): SkyPalette {
-        if (from === to) return to
-        val x = ((nowNanos - startNanos) / 1e9 / seconds).coerceIn(0.0, 1.0).toFloat()
-        if (x >= 1f) {
-            from = to
-            return to
-        }
-        return from.mix(to, x * x * (3f - 2f * x))
-    }
-}
-
+/** The sky's gradient. A full breath ([level] 1) brightens it: plainly at night, barely by day. */
 fun DrawScope.drawSky(p: SkyPalette, level: Float) {
-    val lift = level * 0.65f
-    drawRect(
-        Brush.verticalGradient(
-            listOf(lerp(p.top, p.liftTop, lift), lerp(p.mid, p.liftMid, lift), lerp(p.bottom, p.liftBottom, lift)),
-        ),
-    )
+    val k = 0.55f * level * (1f - p.mid.luminance())
+    drawRect(Brush.verticalGradient(listOf(brighten(p.top, k), brighten(p.mid, k), brighten(p.bottom, k))))
+}
+
+private fun brighten(c: Color, k: Float) =
+    Color(min(1f, c.red * (1 + k)), min(1f, c.green * (1 + k)), min(1f, c.blue * (1 + k)))
+
+/**
+ * A fixed scatter of stars, more of them high up, twinkling slowly. [amount] (the palette's
+ * stars) fades them in through dusk and out at dawn.
+ */
+class StarField(seed: Int = 7031, count: Int = 90) {
+    private val x = FloatArray(count)
+    private val y = FloatArray(count)
+    private val radius = FloatArray(count)
+    private val brightness = FloatArray(count)
+    private val speed = FloatArray(count)
+    private val phase = FloatArray(count)
+
+    init {
+        val rand = Mulberry32(seed)
+        for (i in 0 until count) {
+            x[i] = rand.next().toFloat()
+            y[i] = (rand.next().pow(1.4) * 0.75).toFloat()
+            radius[i] = (0.45 + rand.next().pow(3.0) * 1.1).toFloat() // mostly faint, a few bright
+            brightness[i] = (0.35 + rand.next() * 0.6).toFloat()
+            speed[i] = (0.4 + rand.next() * 1.2).toFloat()
+            phase[i] = (rand.next() * 2 * PI).toFloat()
+        }
+    }
+
+    fun draw(scope: DrawScope, timeSeconds: Double, amount: Float) = with(scope) {
+        if (amount <= 0.01f) return@with
+        for (i in x.indices) {
+            val twinkle = 0.7f + 0.3f * sin(timeSeconds * speed[i] + phase[i]).toFloat()
+            drawCircle(
+                Color.White,
+                radius = radius[i] * density,
+                center = Offset(x[i] * size.width, y[i] * size.height),
+                alpha = (amount * brightness[i] * twinkle).coerceIn(0f, 1f),
+            )
+        }
+    }
 }
 
 /** A soft round puff, drawn once and stamped many times to build the clouds. */

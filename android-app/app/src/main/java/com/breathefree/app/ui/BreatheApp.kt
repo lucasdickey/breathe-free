@@ -11,12 +11,15 @@ import androidx.activity.compose.LocalActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,7 +32,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -41,15 +43,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,7 +62,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -70,7 +79,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.breathefree.app.ActiveSession
@@ -80,14 +88,18 @@ import com.breathefree.app.core.BreathFrame
 import com.breathefree.app.core.SessionPlan
 import com.breathefree.app.core.SoundMode
 import com.breathefree.app.core.Stage
-import kotlinx.coroutines.delay
+import java.time.ZonedDateTime
 import kotlin.math.PI
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 
+/**
+ * The whole app. [clock] gives the wall-clock time the sky follows; tests pass a fixed one.
+ */
 @Composable
-fun BreatheApp(controller: BreatheController) {
+fun BreatheApp(controller: BreatheController, clock: () -> ZonedDateTime = { ZonedDateTime.now() }) {
     val view = LocalView.current
     val context = LocalContext.current
     val activity = LocalActivity.current as? ComponentActivity
@@ -95,13 +107,23 @@ fun BreatheApp(controller: BreatheController) {
     val stillClouds = remember { animationsOff(context) }
     val frameNanos = remember { mutableLongStateOf(System.nanoTime()) }
     val screen = controller.screen
+    var look by remember { mutableStateOf(DaySky.at(clock())) }
 
     // One clock for everything on screen: the vsync time of the frame being drawn, moved on
     // to when that frame will actually reach the glass.
     LaunchedEffect(Unit) {
+        var lookedAt = Long.MIN_VALUE
         while (true) {
             withFrameNanos { nanos ->
                 frameNanos.longValue = nanos
+                // The sky follows the time of day. Looking every 20 seconds is plenty, and
+                // doing it here means it is right the moment the app comes back into view.
+                val now = clock()
+                val slot = now.toEpochSecond() / 20
+                if (slot != lookedAt) {
+                    lookedAt = slot
+                    look = DaySky.at(now)
+                }
                 val active = controller.session
                 if (active != null && controller.screen == Screen.SESSION) {
                     controller.onFrame(active.plan.frameAt(active.timeAt(nanos + leadNanos)))
@@ -110,20 +132,16 @@ fun BreatheApp(controller: BreatheController) {
         }
     }
 
-    val palette = remember { PaletteTransition(SkyPalette.Day) }
-    val target = when (screen) {
-        Screen.HOME -> SkyPalette.Day
-        Screen.SESSION -> SkyPalette.Dusk
-        Screen.DONE -> SkyPalette.Dawn
-    }
-    LaunchedEffect(target) { palette.retarget(target, frameNanos.longValue) }
+    // Text and controls turn light when the sky turns dark, easing across over a second.
+    val darkness by animateFloatAsState(if (look.dark) 1f else 0f, tween(1200), label = "ink")
+    val ink = remember(darkness, look.softness) { Ink.between(Ink.OnLight, Ink.OnDark, darkness).softened(look.softness) }
 
-    LaunchedEffect(screen) {
-        // Dark status bar icons over the daytime sky, light ones at dusk and dawn.
-        val style = if (screen == Screen.HOME) {
-            SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
-        } else {
+    LaunchedEffect(look.dark) {
+        // Status bar icons the same way round as the text.
+        val style = if (look.dark) {
             SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+        } else {
+            SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
         }
         activity?.enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
     }
@@ -139,24 +157,29 @@ fun BreatheApp(controller: BreatheController) {
 
     val sprite = remember { makePuffSprite() }
     val clouds = remember { CloudField() }
-    Box(Modifier.fillMaxSize()) {
-        Canvas(Modifier.fillMaxSize()) {
-            val now = frameNanos.longValue
-            val active = controller.session
-            val level = if (active != null && controller.screen == Screen.SESSION) {
-                active.plan.frameAt(active.timeAt(now + leadNanos)).level
-            } else {
-                0.0
+    val stars = remember { StarField() }
+    CompositionLocalProvider(LocalInk provides ink) {
+        Box(Modifier.fillMaxSize()) {
+            Canvas(Modifier.fillMaxSize()) {
+                val now = frameNanos.longValue
+                val active = controller.session
+                val level = if (active != null && controller.screen == Screen.SESSION) {
+                    active.plan.frameAt(active.timeAt(now + leadNanos)).level
+                } else {
+                    0.0
+                }
+                val p = look.sky
+                val t = if (stillClouds) 0.0 else now / 1e9
+                drawSky(p, level.toFloat())
+                stars.draw(this, t, p.stars)
+                clouds.draw(this, t, p, sprite)
             }
-            val p = palette.at(now)
-            drawSky(p, level.toFloat())
-            clouds.draw(this, if (stillClouds) 0.0 else now / 1e9, p, sprite)
-        }
-        Crossfade(targetState = screen, animationSpec = tween(700), label = "screen") { s ->
-            when (s) {
-                Screen.HOME -> HomeScreen(controller, frameNanos)
-                Screen.SESSION -> controller.session?.let { SessionScreen(controller, it, frameNanos, leadNanos) }
-                Screen.DONE -> DoneScreen(controller, frameNanos)
+            Crossfade(targetState = screen, animationSpec = tween(700), label = "screen") { s ->
+                when (s) {
+                    Screen.HOME -> HomeScreen(controller, frameNanos)
+                    Screen.SESSION -> controller.session?.let { SessionScreen(controller, it, frameNanos, leadNanos) }
+                    Screen.DONE -> DoneScreen(controller, frameNanos)
+                }
             }
         }
     }
@@ -166,7 +189,33 @@ fun BreatheApp(controller: BreatheController) {
 
 @Composable
 private fun HomeScreen(controller: BreatheController, frameNanos: State<Long>) {
-    BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+    val ink = LocalInk.current
+    val choices = remember { SessionPlan.CYCLE_CHOICES.toList() }
+    var choosing by rememberSaveable { mutableStateOf(false) }
+    val choosingNow by rememberUpdatedState(choosing)
+    val places = remember { Places() }
+    BackHandler(enabled = choosing) { choosing = false }
+
+    BoxWithConstraints(
+        Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { places.screen = it }
+            .pointerInput(Unit) {
+                // While the session length is open, a touch anywhere else folds it and goes
+                // no further, so it doesn't also press whatever is underneath.
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    if (!choosingNow || places.onPicker(down.position)) return@awaitEachGesture
+                    choosing = false
+                    down.consume()
+                    do {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        event.changes.forEach { it.consume() }
+                    } while (event.changes.any { it.pressed })
+                }
+            }
+            .windowInsetsPadding(WindowInsets.safeDrawing),
+    ) {
         Column(
             Modifier
                 .fillMaxWidth()
@@ -179,36 +228,33 @@ private fun HomeScreen(controller: BreatheController, frameNanos: State<Long>) {
             Canvas(Modifier.size(132.dp)) {
                 val t = frameNanos.value / 1e9
                 val level = (0.5 - 0.5 * cos(2 * PI * t / 10.0)).toFloat()
-                drawOrb(center, size.minDimension * (0.2f + 0.1f * level), level, OrbColors.Day)
+                drawOrb(center, size.minDimension * (0.2f + 0.1f * level), level, ink.orb)
             }
             Spacer(Modifier.height(8.dp))
             BasicText(
                 "Breathe Free",
-                style = TextStyle(color = Ink.Deep, fontSize = 34.sp, fontWeight = FontWeight.Light, letterSpacing = 0.5.sp),
-            )
-            Spacer(Modifier.height(8.dp))
-            BasicText(
-                "Box breathing: in, hold, out, hold.\nFour counts each.",
-                style = TextStyle(color = Ink.Soft, fontSize = 16.sp, textAlign = TextAlign.Center, lineHeight = 22.sp),
+                style = TextStyle(color = ink.deep, fontSize = 34.sp, fontWeight = FontWeight.Light, letterSpacing = 0.5.sp),
             )
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(36.dp))
             Label("Session length")
             Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                for (n in SessionPlan.CYCLE_CHOICES) {
-                    Chip(
-                        text = n.toString(),
-                        selected = n == controller.cycles,
-                        onClick = { controller.chooseCycles(n) },
-                        description = "$n cycles, ${spokenDuration(n)}",
-                    )
-                }
-            }
+            CyclePicker(
+                choices = choices,
+                selected = controller.cycles,
+                open = choosing,
+                onOpen = { choosing = true },
+                onPick = {
+                    controller.chooseCycles(it)
+                    choosing = false
+                },
+                describe = { "$it cycles, ${spokenDuration(it)}" },
+                onBounds = { places.picker = it },
+            )
             Spacer(Modifier.height(8.dp))
             BasicText(
                 "${controller.cycles} cycles · ${clock(controller.cycles * SessionPlan.CYCLE_SECONDS.toInt())}",
-                style = TextStyle(color = Ink.Soft, fontSize = 14.sp),
+                style = TextStyle(color = ink.soft, fontSize = 14.sp),
             )
 
             Spacer(Modifier.height(24.dp))
@@ -225,12 +271,19 @@ private fun HomeScreen(controller: BreatheController, frameNanos: State<Long>) {
 
             Spacer(Modifier.height(32.dp))
             PrimaryButton("Begin", onClick = controller::begin)
-            Spacer(Modifier.height(14.dp))
-            BasicText(
-                "Sit comfortably. Headphones bring the sound closer.",
-                style = TextStyle(color = Ink.Soft.copy(alpha = 0.85f), fontSize = 13.sp, textAlign = TextAlign.Center),
-            )
         }
+    }
+}
+
+/** Where the home screen and the session-length row are, to tell a touch on the row from one elsewhere. */
+private class Places {
+    var screen: LayoutCoordinates? = null
+    var picker: LayoutCoordinates? = null
+
+    fun onPicker(position: Offset): Boolean {
+        val s = screen?.takeIf { it.isAttached } ?: return false
+        val p = picker?.takeIf { it.isAttached } ?: return false
+        return s.localBoundingBoxOf(p, clipBounds = false).contains(position)
     }
 }
 
@@ -238,12 +291,13 @@ private fun HomeScreen(controller: BreatheController, frameNanos: State<Long>) {
 private fun Label(text: String) {
     BasicText(
         text.uppercase(),
-        style = TextStyle(color = Ink.Soft, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.4.sp),
+        style = TextStyle(color = LocalInk.current.soft, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.4.sp),
     )
 }
 
 @Composable
 private fun VibrationToggle(on: Boolean, onChange: (Boolean) -> Unit) {
+    val ink = LocalInk.current
     val interaction = remember { MutableInteractionSource() }
     Row(
         Modifier
@@ -261,14 +315,13 @@ private fun VibrationToggle(on: Boolean, onChange: (Boolean) -> Unit) {
         BasicText(
             "Vibrate at each change",
             Modifier.weight(1f),
-            style = TextStyle(color = Ink.Deep, fontSize = 15.sp),
+            style = TextStyle(color = ink.deep, fontSize = 15.sp),
         )
         Canvas(Modifier.size(width = 46.dp, height = 28.dp)) {
-            val track = if (on) Ink.Accent else Color.White.copy(alpha = 0.7f)
-            drawRoundRect(track, cornerRadius = CornerRadius(size.height / 2))
+            drawRoundRect(if (on) ink.accent else ink.field, cornerRadius = CornerRadius(size.height / 2))
             val r = size.height / 2 - 3.dp.toPx()
             val x = if (on) size.width - size.height / 2 else size.height / 2
-            drawCircle(if (on) Color.White else Ink.Soft.copy(alpha = 0.6f), r, Offset(x, size.height / 2))
+            drawCircle(if (on) ink.onAccent else ink.soft.copy(alpha = 0.6f), r, Offset(x, size.height / 2))
         }
     }
 }
@@ -282,6 +335,7 @@ private fun SessionScreen(
     frameNanos: State<Long>,
     leadNanos: Long,
 ) {
+    val ink = LocalInk.current
     val painter = remember { SessionPainter() }
     val plan = active.plan
     // Text only recomposes when what it shows changes, not on every frame.
@@ -303,7 +357,7 @@ private fun SessionScreen(
 
         Canvas(Modifier.fillMaxSize()) {
             val t = active.timeAt(frameNanos.value + leadNanos)
-            painter.draw(this, g, plan, plan.frameAt(t), t)
+            painter.draw(this, g, plan, plan.frameAt(t), t, ink)
         }
 
         if (count > 0) {
@@ -329,14 +383,14 @@ private fun SessionScreen(
             BasicText(
                 text,
                 Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                style = TextStyle(color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Light, letterSpacing = 0.5.sp),
+                style = TextStyle(color = ink.deep, fontSize = 30.sp, fontWeight = FontWeight.Light, letterSpacing = 0.5.sp),
             )
         }
         if (hint.isNotEmpty()) {
             BasicText(
                 hint,
                 Modifier.centerAt(g.cx, hintY),
-                style = TextStyle(color = Color.White.copy(alpha = 0.65f), fontSize = 15.sp),
+                style = TextStyle(color = ink.soft, fontSize = 15.sp),
             )
         }
 
@@ -355,7 +409,7 @@ private fun SessionScreen(
                 Modifier
                     .align(Alignment.Center)
                     .semantics { contentDescription = "${spokenClock(left)} left" },
-                style = TextStyle(color = Color.White.copy(alpha = 0.85f), fontSize = 16.sp, fontFeatureSettings = "tnum"),
+                style = TextStyle(color = ink.deep, fontSize = 16.sp, fontFeatureSettings = "tnum"),
             )
             Box(Modifier.align(Alignment.CenterEnd)) {
                 SoundButton(controller.sessionSound, controller::nextSessionSound)
@@ -372,16 +426,16 @@ private fun SessionScreen(
         ) {
             BasicText(
                 if (settling) "Starting soon" else "Cycle $cycle of ${plan.cycles}",
-                style = TextStyle(color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp),
+                style = TextStyle(color = ink.soft, fontSize = 14.sp),
             )
             Spacer(Modifier.height(10.dp))
             Canvas(Modifier.width(160.dp).height(3.dp)) {
                 val f = frame.value
                 val done = (1.0 - f.remaining / plan.breathingSeconds).coerceIn(0.0, 1.0).toFloat()
                 val radius = CornerRadius(size.height / 2)
-                drawRoundRect(Color.White.copy(alpha = 0.18f), cornerRadius = radius)
+                drawRoundRect(ink.line.copy(alpha = 0.18f), cornerRadius = radius)
                 drawRoundRect(
-                    Color.White.copy(alpha = 0.7f),
+                    ink.line.copy(alpha = 0.7f),
                     size = size.copy(width = size.width * done),
                     cornerRadius = radius,
                 )
@@ -392,6 +446,7 @@ private fun SessionScreen(
 
 @Composable
 private fun SoundButton(mode: SoundMode, onClick: () -> Unit) {
+    val ink = LocalInk.current
     var showLabel by remember { mutableStateOf(false) }
     var first by remember { mutableStateOf(true) }
     LaunchedEffect(mode) {
@@ -417,9 +472,9 @@ private fun SoundButton(mode: SoundMode, onClick: () -> Unit) {
                 Modifier
                     .padding(top = 6.dp)
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.14f))
+                    .background(ink.glass)
                     .padding(horizontal = 10.dp, vertical = 4.dp),
-                style = TextStyle(color = Color.White, fontSize = 13.sp),
+                style = TextStyle(color = ink.deep, fontSize = 13.sp),
             )
         }
     }
@@ -429,6 +484,7 @@ private fun SoundButton(mode: SoundMode, onClick: () -> Unit) {
 
 @Composable
 private fun DoneScreen(controller: BreatheController, frameNanos: State<Long>) {
+    val ink = LocalInk.current
     val cycles = controller.session?.plan?.cycles ?: controller.cycles
     BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
         Column(
@@ -443,26 +499,26 @@ private fun DoneScreen(controller: BreatheController, frameNanos: State<Long>) {
             Canvas(Modifier.size(150.dp)) {
                 val t = frameNanos.value / 1e9
                 val level = (0.35 + 0.25 * (0.5 - 0.5 * cos(2 * PI * t / 12.0))).toFloat()
-                drawOrb(center, size.minDimension * (0.2f + 0.12f * level), level, OrbColors.Night)
+                drawOrb(center, size.minDimension * (0.2f + 0.12f * level), level, ink.orb)
             }
             Spacer(Modifier.height(12.dp))
             BasicText(
                 "Well done",
                 Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                style = TextStyle(color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Light),
+                style = TextStyle(color = ink.deep, fontSize = 34.sp, fontWeight = FontWeight.Light),
             )
             Spacer(Modifier.height(8.dp))
             BasicText(
                 "Be easy. Breathe deeply.",
-                style = TextStyle(color = Color.White.copy(alpha = 0.88f), fontSize = 18.sp),
+                style = TextStyle(color = ink.deep, fontSize = 18.sp),
             )
             Spacer(Modifier.height(6.dp))
             BasicText(
                 "$cycles cycles · ${clock(cycles * SessionPlan.CYCLE_SECONDS.toInt())} of box breathing",
-                style = TextStyle(color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp),
+                style = TextStyle(color = ink.soft, fontSize = 14.sp),
             )
             Spacer(Modifier.height(40.dp))
-            PrimaryButton("Done", onClick = controller::backHome, light = true)
+            PrimaryButton("Done", onClick = controller::backHome)
             Spacer(Modifier.height(12.dp))
             OutlineButton("Breathe again", onClick = controller::begin)
         }
