@@ -416,6 +416,25 @@ fun RoundIconButton(
     }
 }
 
+/** A see-through capsule with words on it, for an action a symbol alone leaves unclear. */
+@Composable
+fun PillButton(label: String, onClick: () -> Unit, height: Dp = 44.dp) {
+    val ink = LocalInk.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    Box(
+        Modifier
+            .height(height)
+            .clip(CircleShape)
+            .background(if (pressed) ink.glassPressed else ink.glass)
+            .pressable(interaction, Role.Button, onClick)
+            .padding(horizontal = 18.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        BasicText(label, style = TextStyle(color = ink.deep, fontSize = 14.sp, fontWeight = FontWeight.SemiBold))
+    }
+}
+
 /** Line icons on a 24-unit grid. */
 object Icons {
     private fun DrawScope.u(): Float = size.minDimension / 24f
@@ -441,6 +460,22 @@ object Icons {
             lineTo(12f * k, 19.5f * k)
             lineTo(7f * k, 15f * k)
             lineTo(3f * k, 15f * k)
+            close()
+        }
+        drawPath(p, color, style = Stroke(width = 2f * k, join = StrokeJoin.Round))
+    }
+
+    fun pause(scope: DrawScope, color: Color) = with(scope) {
+        line(color, 9f, 6f, 9f, 18f)
+        line(color, 15f, 6f, 15f, 18f)
+    }
+
+    fun play(scope: DrawScope, color: Color) = with(scope) {
+        val k = u()
+        val p = Path().apply {
+            moveTo(8.5f * k, 5.5f * k)
+            lineTo(18.5f * k, 12f * k)
+            lineTo(8.5f * k, 18.5f * k)
             close()
         }
         drawPath(p, color, style = Stroke(width = 2f * k, join = StrokeJoin.Round))

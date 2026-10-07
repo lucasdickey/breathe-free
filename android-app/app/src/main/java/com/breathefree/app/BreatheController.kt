@@ -13,9 +13,27 @@ import com.breathefree.app.core.Stage
 
 enum class Screen { HOME, SESSION, DONE }
 
-/** A session in progress: its plan and the frame-clock time, in nanoseconds, at which its time is zero. */
-class ActiveSession(val plan: SessionPlan, val startNanos: Long) {
-    fun timeAt(nanos: Long): Double = (nanos - startNanos) / 1e9
+/**
+ * A session in progress: its plan and the frame-clock time, in nanoseconds, at which its time is
+ * zero. While paused, its time stands still at [pausedNanos].
+ */
+data class ActiveSession(val plan: SessionPlan, val startNanos: Long, val pausedNanos: Long? = null) {
+    val isPaused: Boolean get() = pausedNanos != null
+
+    /** Session time at frame-clock time [nanos]: the seconds since the start, less any time paused. */
+    fun timeAt(nanos: Long): Double = ((pausedNanos ?: nanos) - startNanos) / 1e9
+
+    /** The same session held still at [nanos]. Pausing a paused session changes nothing. */
+    fun pausedAt(nanos: Long): ActiveSession = if (isPaused) this else copy(pausedNanos = nanos)
+
+    /**
+     * Carries on from where it was held: the start moves later by the time spent paused, so the
+     * session picks up at the moment it stopped. Resuming a running session changes nothing.
+     */
+    fun resumedAt(nanos: Long): ActiveSession {
+        val held = pausedNanos ?: return this
+        return ActiveSession(plan, startNanos + (nanos - held))
+    }
 }
 
 /**
@@ -93,7 +111,34 @@ class BreatheController(context: Context, private val nanoTime: () -> Long = Sys
         if (!first && hapticsOn && frame.phase != null) haptics.phase(frame.phase)
     }
 
-    /** The speaker button during a session: ambient → bells only → silent → ambient. */
+    val isPaused: Boolean get() = session?.isPaused == true
+
+    /** Hold the session still where it is: the picture stops and the sound fades out. */
+    fun pause() {
+        val active = session ?: return
+        if (active.isPaused || screen != Screen.SESSION) return
+        session = active.pausedAt(nanoTime())
+        stopAudio()
+    }
+
+    /** Carry on from the moment it was paused; the sound fades back in on the beat. */
+    fun resume() {
+        val active = session ?: return
+        if (!active.isPaused) return
+        val resumed = active.resumedAt(nanoTime())
+        session = resumed
+        startAudio(resumed, sessionSound)
+    }
+
+    /** The pause button. */
+    fun togglePause() {
+        if (isPaused) resume() else pause()
+    }
+
+    /**
+     * The speaker button during a session: ambient → bells only → silent → ambient. While paused
+     * it only changes the choice; the sound starts in that mode on resume.
+     */
     fun nextSessionSound() {
         val active = session ?: return
         val next = when (sessionSound) {
@@ -106,7 +151,7 @@ class BreatheController(context: Context, private val nanoTime: () -> Long = Sys
         when {
             next == SoundMode.SILENT -> stopAudio()
             running != null -> running.setMode(next)
-            else -> startAudio(active, next)
+            !active.isPaused -> startAudio(active, next)
         }
     }
 

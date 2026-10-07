@@ -339,6 +339,9 @@ private fun SessionScreen(
     val ink = LocalInk.current
     val painter = remember { SessionPainter() }
     val plan = active.plan
+    // Paused, the session clock stands still, so everything below holds where it is.
+    val paused = active.isPaused
+    val sceneAlpha by animateFloatAsState(if (paused) 0.45f else 1f, tween(350), label = "pause dim")
     // Text only recomposes when what it shows changes, not on every frame.
     val frame = remember(active) { derivedStateOf { plan.frameAt(active.timeAt(frameNanos.value + leadNanos)) } }
     // Which words are crossing changes only at a phase change; how far they have crossed is
@@ -360,7 +363,7 @@ private fun SessionScreen(
         val promptY = g.cy + g.half + with(density) { 58.dp.toPx() }
         val hintY = promptY + with(density) { 38.dp.toPx() }
 
-        Canvas(Modifier.fillMaxSize()) {
+        Canvas(Modifier.fillMaxSize().graphicsLayer { alpha = sceneAlpha }) {
             val t = active.timeAt(frameNanos.value + leadNanos)
             painter.draw(this, g, plan, plan.frameAt(t), t, ink)
         }
@@ -368,7 +371,7 @@ private fun SessionScreen(
         if (count > 0) {
             BasicText(
                 count.toString(),
-                Modifier.centerAt(g.cx, g.cy),
+                Modifier.centerAt(g.cx, g.cy).graphicsLayer { alpha = sceneAlpha },
                 style = TextStyle(
                     // Dark on the lit orb: white disappears into its bright centre.
                     color = Color(0xFF0B3A55).copy(alpha = if (settling) 0.55f else 0.8f),
@@ -382,29 +385,42 @@ private fun SessionScreen(
         // The words before fade out as the new ones fade in, each centred on its own, both
         // worked out from the session clock like everything else here.
         val promptStyle = TextStyle(color = ink.deep, fontSize = 30.sp, fontWeight = FontWeight.Light, letterSpacing = 0.5.sp)
-        fun fade() = plan.promptAt(active.timeAt(frameNanos.value + leadNanos)).fade.toFloat()
-        BasicText(
-            words.second,
-            Modifier
-                .centerAt(g.cx, promptY)
-                .graphicsLayer { alpha = 1f - fade() }
-                .clearAndSetSemantics { },
-            style = promptStyle,
-        )
-        BasicText(
-            words.first,
-            Modifier
-                .centerAt(g.cx, promptY)
-                .graphicsLayer { alpha = fade() }
-                .semantics { liveRegion = LiveRegionMode.Polite },
-            style = promptStyle,
-        )
-        if (hint.isNotEmpty()) {
+        if (paused) {
             BasicText(
-                hint,
+                "Paused",
+                Modifier.centerAt(g.cx, promptY).semantics { liveRegion = LiveRegionMode.Polite },
+                style = promptStyle,
+            )
+            BasicText(
+                "Tap play to carry on",
                 Modifier.centerAt(g.cx, hintY),
                 style = TextStyle(color = ink.soft, fontSize = 15.sp),
             )
+        } else {
+            fun fade() = plan.promptAt(active.timeAt(frameNanos.value + leadNanos)).fade.toFloat()
+            BasicText(
+                words.second,
+                Modifier
+                    .centerAt(g.cx, promptY)
+                    .graphicsLayer { alpha = 1f - fade() }
+                    .clearAndSetSemantics { },
+                style = promptStyle,
+            )
+            BasicText(
+                words.first,
+                Modifier
+                    .centerAt(g.cx, promptY)
+                    .graphicsLayer { alpha = fade() }
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+                style = promptStyle,
+            )
+            if (hint.isNotEmpty()) {
+                BasicText(
+                    hint,
+                    Modifier.centerAt(g.cx, hintY),
+                    style = TextStyle(color = ink.soft, fontSize = 15.sp),
+                )
+            }
         }
 
         // Top bar.
@@ -415,7 +431,8 @@ private fun SessionScreen(
                 .padding(horizontal = 16.dp, vertical = 10.dp),
         ) {
             Box(Modifier.align(Alignment.CenterStart)) {
-                RoundIconButton("End session", controller::endSession) { Icons.close(this, it) }
+                // Words rather than an ✕, which reads as closing a panel, not ending the session.
+                PillButton("End session", controller::endSession)
             }
             BasicText(
                 clock(left),
@@ -424,7 +441,12 @@ private fun SessionScreen(
                     .semantics { contentDescription = "${spokenClock(left)} left" },
                 style = TextStyle(color = ink.deep, fontSize = 16.sp, fontFeatureSettings = "tnum"),
             )
-            Box(Modifier.align(Alignment.CenterEnd)) {
+            Row(Modifier.align(Alignment.CenterEnd)) {
+                // For when someone walks in: everything holds still until it is tapped again.
+                RoundIconButton(if (paused) "Resume session" else "Pause session", controller::togglePause) { color ->
+                    if (paused) Icons.play(this, color) else Icons.pause(this, color)
+                }
+                Spacer(Modifier.width(10.dp))
                 SoundButton(controller.sessionSound, controller::nextSessionSound)
             }
         }
