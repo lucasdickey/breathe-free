@@ -18,20 +18,14 @@ enum MediaClock {
 }
 
 struct SkyView: View {
-    @ObservedObject var model: SessionModel
     let sky: SkyPalette
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         TimelineView(.animation) { _ in
             Canvas { context, size in
-                let now = MediaClock.now()
-                var level = 0.0
-                if model.screen == .session, let active = model.session {
-                    level = active.plan.frame(at: active.time(at: now + SessionView.displayLead)).level
-                }
-                let t = reduceMotion ? 0 : now
-                SceneDrawing.sky(&context, size: size, palette: sky, level: level)
+                let t = reduceMotion ? 0 : MediaClock.now()
+                SceneDrawing.sky(&context, size: size, palette: sky)
                 StarField.shared.draw(in: &context, size: size, time: t, amount: sky.stars)
                 let sprite = context.resolve(Image(decorative: CloudField.puff, scale: 1))
                 CloudField.shared.draw(in: &context, size: size, time: t, palette: sky, sprite: sprite)

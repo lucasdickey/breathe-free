@@ -15,7 +15,7 @@ struct ContentView: View {
         TimelineView(.periodic(from: .now, by: 20)) { timeline in
             let look = DaySky.look(at: timeline.date)
             ZStack {
-                SkyView(model: model, sky: look.sky)
+                SkyView(sky: look.sky)
                 switch model.screen {
                 case .home:
                     HomeView(model: model)

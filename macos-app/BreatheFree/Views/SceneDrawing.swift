@@ -328,11 +328,11 @@ struct SceneGeometry {
 enum SceneDrawing {
     private static let ripplesLast = 2.4
 
-    /// The sky's gradient. A full breath (`level` 1) brightens it: plainly at night, barely by day.
-    static func sky(_ context: inout GraphicsContext, size: CGSize, palette p: SkyPalette, level: Double) {
-        let k = 0.55 * level * (1 - p.mid.luminance)
-        let gradient = Gradient(colors: [p.top.brightened(k).color(), p.mid.brightened(k).color(),
-                                         p.bottom.brightened(k).color()])
+    /// The sky's gradient. It holds steady through the breath so the clouds drift on unchanged: a
+    /// sky that lightened with each breath in washed them out, and their coming back on the breath
+    /// out looked like them starting over every cycle.
+    static func sky(_ context: inout GraphicsContext, size: CGSize, palette p: SkyPalette) {
+        let gradient = Gradient(colors: [p.top.color(), p.mid.color(), p.bottom.color()])
         context.fill(Path(CGRect(origin: .zero, size: size)),
                      with: .linearGradient(gradient, startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
     }
@@ -340,8 +340,9 @@ enum SceneDrawing {
     static func orb(_ context: inout GraphicsContext, center: CGPoint, radius: Double, level: Double,
                     colors: OrbColors, alpha: Double = 1) {
         guard alpha > 0, radius > 0 else { return }
-        // Halo: strongest at the rim, gone by about twice the radius; fuller breath, wider glow.
-        let haloRadius = radius * (1.9 + 0.35 * level)
+        // Halo: strongest at the rim, then fading over much the same width at every breath, so it
+        // stays close to the orb and leaves the clouds beyond the box alone.
+        let haloRadius = radius * (1.9 - 0.45 * level)
         let haloAlpha = (0.26 + 0.22 * level) * alpha
         let rim = (radius / haloRadius) * 0.92
         context.fill(

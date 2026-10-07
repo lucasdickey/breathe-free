@@ -163,15 +163,9 @@ fun BreatheApp(controller: BreatheController, clock: () -> ZonedDateTime = { Zon
         Box(Modifier.fillMaxSize()) {
             Canvas(Modifier.fillMaxSize()) {
                 val now = frameNanos.longValue
-                val active = controller.session
-                val level = if (active != null && controller.screen == Screen.SESSION) {
-                    active.plan.frameAt(active.timeAt(now + leadNanos)).level
-                } else {
-                    0.0
-                }
                 val p = look.sky
                 val t = if (stillClouds) 0.0 else now / 1e9
-                drawSky(p, level.toFloat())
+                drawSky(p)
                 stars.draw(this, t, p.stars)
                 clouds.draw(this, t, p, sprite)
             }

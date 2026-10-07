@@ -13,7 +13,6 @@ import androidx.compose.ui.graphics.RadialGradientShader
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.luminance
 import kotlin.math.PI
 import kotlin.math.floor
 import kotlin.math.max
@@ -49,14 +48,14 @@ data class SkyPalette(
         Color(a.red + (b.red - a.red) * t, a.green + (b.green - a.green) * t, a.blue + (b.blue - a.blue) * t)
 }
 
-/** The sky's gradient. A full breath ([level] 1) brightens it: plainly at night, barely by day. */
-fun DrawScope.drawSky(p: SkyPalette, level: Float) {
-    val k = 0.55f * level * (1f - p.mid.luminance())
-    drawRect(Brush.verticalGradient(listOf(brighten(p.top, k), brighten(p.mid, k), brighten(p.bottom, k))))
+/**
+ * The sky's gradient. It holds steady through the breath so the clouds drift on unchanged: a sky
+ * that lightened with each breath in washed them out, and their coming back on the breath out
+ * looked like them starting over every cycle.
+ */
+fun DrawScope.drawSky(p: SkyPalette) {
+    drawRect(Brush.verticalGradient(listOf(p.top, p.mid, p.bottom)))
 }
-
-private fun brighten(c: Color, k: Float) =
-    Color(min(1f, c.red * (1 + k)), min(1f, c.green * (1 + k)), min(1f, c.blue * (1 + k)))
 
 /**
  * A fixed scatter of stars, more of them high up, twinkling slowly. [amount] (the palette's
