@@ -1,37 +1,36 @@
 "use client";
 
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, MotionValue, useTransform } from 'framer-motion';
 
 type BalloonProps = {
   breathingState: 'idle' | 'pre-start' | 'in' | 'hold-in' | 'out' | 'hold-out' | 'completed';
   countdown: number;
   prompt: string;
+  /** How full the lungs are, 0..1, straight from the session clock. */
+  level: MotionValue<number>;
 };
 
-const Balloon = ({ breathingState, countdown, prompt }: BalloonProps) => {
+const Balloon = ({ breathingState, countdown, prompt, level }: BalloonProps) => {
   const balloonVariants = {
-    idle: { scale: 1, backgroundColor: '#ffffff' },
-    'pre-start': { scale: 1, backgroundColor: '#06b6d4' },
-    in: { scale: 2, backgroundColor: '#06b6d4' },
-    'hold-in': { scale: 2, backgroundColor: '#06b6d4' },
-    out: { scale: 1, backgroundColor: '#06b6d4' },
-    'hold-out': { scale: 1, backgroundColor: '#06b6d4' },
-    completed: { scale: 1, backgroundColor: '#06b6d4' },
+    idle: { backgroundColor: '#ffffff' },
+    'pre-start': { backgroundColor: '#06b6d4' },
+    in: { backgroundColor: '#06b6d4' },
+    'hold-in': { backgroundColor: '#06b6d4' },
+    out: { backgroundColor: '#06b6d4' },
+    'hold-out': { backgroundColor: '#06b6d4' },
+    completed: { backgroundColor: '#06b6d4' },
   };
 
-  // Only inhale/exhale sweep the full 4-second phase; entering a hold (or
-  // stopping) should settle quickly instead of dragging a stale 4s tween.
-  const scaleDuration = breathingState === 'in' || breathingState === 'out' ? 4 : 0.4;
+  // The size is the breath itself, read every frame from the same curve the sound
+  // swells with, rather than a tween started when the phase changes.
+  const scale = useTransform(level, (l) => 1 + l);
 
   return (
     <motion.div
       variants={balloonVariants}
       animate={breathingState}
-      transition={{
-        duration: scaleDuration,
-        ease: "easeInOut",
-        backgroundColor: { duration: 0.5 }
-      }}
+      transition={{ backgroundColor: { duration: 0.5 } }}
+      style={{ scale }}
       className="relative flex h-64 w-64 items-center justify-center rounded-full shadow-2xl sm:h-64 sm:w-64"
     >
       <div className="absolute flex flex-col items-center justify-center text-center px-4">

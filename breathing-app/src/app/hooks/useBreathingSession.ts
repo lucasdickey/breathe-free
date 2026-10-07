@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMotionValue } from 'framer-motion';
 
 export type BreathingPhase =
   | 'idle'
@@ -11,12 +12,16 @@ export type BreathingPhase =
   | 'hold-out'
   | 'completed';
 
+export type SoundMode = 'ambient' | 'bells' | 'silent';
+
 export const PRE_START_SECONDS = 8;
 export const PHASE_SECONDS = 4;
 export const CYCLE_SECONDS = PHASE_SECONDS * 4; // in, hold-in, out, hold-out
 
-const AUDIO_FILE = '/audio/breath-chord-loop-icetinespad.mp3';
+const WORKLET_URL = '/worklets/breath-synth.js';
 const PHASE_ORDER: BreathingPhase[] = ['in', 'hold-in', 'out', 'hold-out'];
+// A short lead so the first frame and the first sample both land after "now".
+const LEAD_SECONDS = 0.35;
 
 interface SessionSnapshot {
   phase: BreathingPhase;
@@ -33,25 +38,65 @@ const IDLE_SNAPSHOT: SessionSnapshot = {
 };
 
 /**
- * Drives the whole breathing session off a single monotonic clock.
+ * Lung level across an inhale, 0 → 1 (an exhale is 1 - rise). The same curve the
+ * macOS and Android apps use for the orb and for the sound's swell.
+ */
+function rise(p: number): number {
+  const q = Math.pow(Math.min(Math.max(p, 0), 1), 0.8);
+  return 0.5 - 0.5 * Math.cos(Math.PI * q);
+}
+
+/** Pure time → session state. t is seconds since session start. */
+function computeFrame(t: number, cycles: number): SessionSnapshot & { level: number } {
+  const breathingTotal = cycles * CYCLE_SECONDS;
+  if (t < PRE_START_SECONDS) {
+    return {
+      phase: 'pre-start',
+      countdown: Math.min(PRE_START_SECONDS, Math.max(1, Math.ceil(PRE_START_SECONDS - Math.max(0, t) - 1e-9))),
+      currentCycle: 0,
+      remainingSeconds: breathingTotal,
+      level: 0,
+    };
+  }
+  const tb = t - PRE_START_SECONDS; // time spent breathing
+  if (tb >= breathingTotal) {
+    return { phase: 'completed', countdown: 0, currentCycle: 0, remainingSeconds: 0, level: 0 };
+  }
+  const index = Math.min(cycles * 4 - 1, Math.floor(tb / PHASE_SECONDS));
+  const inPhase = tb - index * PHASE_SECONDS;
+  const p = Math.min(1, inPhase / PHASE_SECONDS);
+  const phase = PHASE_ORDER[index % 4];
+  const level = phase === 'in' ? rise(p) : phase === 'hold-in' ? 1 : phase === 'out' ? 1 - rise(p) : 0;
+  return {
+    phase,
+    countdown: Math.min(PHASE_SECONDS, Math.max(1, Math.ceil(PHASE_SECONDS - inPhase - 1e-9))),
+    currentCycle: Math.floor(index / 4) + 1,
+    remainingSeconds: Math.ceil(breathingTotal - tb - 1e-9),
+    level,
+  };
+}
+
+/**
+ * Drives the whole breathing session off one clock.
  *
- * Phase, countdown and remaining time are pure functions of elapsed time, so
- * there is no setInterval drift and no state-transition side effects. When the
- * audio buffer is available, the AudioContext's own clock is the master clock
- * and the looped audio source is scheduled on it — the loop period is scaled
- * to exactly one 16s breathing cycle, so sound and visuals cannot diverge.
+ * Phase, countdown, remaining time and breath level are pure functions of elapsed time,
+ * so nothing drifts. With sound on, the clock is the AudioContext's: the synth (an
+ * AudioWorklet, the same generator the native apps use) renders each block for the
+ * session time at which it will be heard, and the picture shows the session time that is
+ * audible now (getOutputTimestamp), so the bells land as the words change even over
+ * Bluetooth.
  */
 export function useBreathingSession() {
   const [snapshot, setSnapshot] = useState<SessionSnapshot>(IDLE_SNAPSHOT);
   const [volume, setVolume] = useState(0.7);
   const [isMuted, setIsMuted] = useState(false);
+  /** How full the lungs are right now, 0..1; updated every frame without re-rendering. */
+  const level = useMotionValue(0);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const bufferRef = useRef<AudioBuffer | null>(null);
-  const bufferPromiseRef = useRef<Promise<AudioBuffer | null> | null>(null);
-  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const workletRef = useRef<Promise<boolean> | null>(null);
+  const nodeRef = useRef<AudioWorkletNode | null>(null);
   const masterGainRef = useRef<GainNode | null>(null);
-  const fadeGainRef = useRef<GainNode | null>(null);
   const rafRef = useRef<number>(0);
   const runningRef = useRef(false);
 
@@ -62,7 +107,7 @@ export function useBreathingSession() {
     if (typeof window === 'undefined') return null;
     if (!audioCtxRef.current) {
       try {
-        audioCtxRef.current = new AudioContext();
+        audioCtxRef.current = new AudioContext({ latencyHint: 'playback' });
       } catch {
         return null;
       }
@@ -70,39 +115,51 @@ export function useBreathingSession() {
     return audioCtxRef.current;
   }, []);
 
-  const loadBuffer = useCallback((ctx: AudioContext): Promise<AudioBuffer | null> => {
-    if (bufferRef.current) return Promise.resolve(bufferRef.current);
-    if (!bufferPromiseRef.current) {
-      bufferPromiseRef.current = fetch(AUDIO_FILE)
-        .then((res) => res.arrayBuffer())
-        .then((data) => ctx.decodeAudioData(data))
-        .then((buffer) => {
-          bufferRef.current = buffer;
-          return buffer;
-        })
-        .catch((error) => {
-          console.error('Failed to load breathing audio:', error);
-          bufferPromiseRef.current = null;
-          return null;
-        });
+  const loadWorklet = useCallback((ctx: AudioContext): Promise<boolean> => {
+    if (!workletRef.current) {
+      workletRef.current = ctx.audioWorklet
+        ? ctx.audioWorklet.addModule(WORKLET_URL).then(
+            () => true,
+            (error) => {
+              console.error('Failed to load breathing sound:', error);
+              workletRef.current = null;
+              return false;
+            },
+          )
+        : Promise.resolve(false);
     }
-    return bufferPromiseRef.current;
+    return workletRef.current;
   }, []);
 
+  /**
+   * Call straight from the click that starts a session. Browsers (Safari especially)
+   * only let audio start inside the user's gesture, and starting a session may first
+   * wait on the network.
+   */
+  const prime = useCallback(() => {
+    const ctx = getContext();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    loadWorklet(ctx);
+  }, [getContext, loadWorklet]);
+
   const stopAudio = useCallback(() => {
-    if (sourceRef.current) {
-      try {
-        sourceRef.current.stop();
-      } catch {
-        // already stopped
-      }
-      sourceRef.current.disconnect();
-      sourceRef.current = null;
-    }
-    if (fadeGainRef.current) {
-      fadeGainRef.current.disconnect();
-      fadeGainRef.current = null;
-    }
+    const node = nodeRef.current;
+    nodeRef.current = null;
+    if (!node) return;
+    // Fade out, then let go once the synth reports silence (or after a second regardless).
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      node.port.onmessage = null;
+      node.disconnect();
+    };
+    node.port.onmessage = (event) => {
+      if (event.data?.type === 'finished') release();
+    };
+    node.port.postMessage({ type: 'fadeOut' });
+    setTimeout(release, 1000);
   }, []);
 
   const stopTicker = useCallback(() => {
@@ -113,119 +170,116 @@ export function useBreathingSession() {
     }
   }, []);
 
-  /** Pure time → session state math. t is seconds since session start. */
-  const computeSnapshot = useCallback((t: number, cycles: number): SessionSnapshot => {
-    const breathingTotal = cycles * CYCLE_SECONDS;
-    if (t < PRE_START_SECONDS) {
-      return {
-        phase: 'pre-start',
-        countdown: Math.min(PRE_START_SECONDS, Math.max(1, Math.ceil(PRE_START_SECONDS - t))),
-        currentCycle: 0,
-        remainingSeconds: breathingTotal,
-      };
-    }
-    const tb = t - PRE_START_SECONDS; // time spent breathing
-    if (tb >= breathingTotal) {
-      return { phase: 'completed', countdown: 0, currentCycle: 0, remainingSeconds: 0 };
-    }
-    const cycleIndex = Math.floor(tb / CYCLE_SECONDS);
-    const inCycle = tb - cycleIndex * CYCLE_SECONDS;
-    const phaseIndex = Math.min(3, Math.floor(inCycle / PHASE_SECONDS));
-    const inPhase = inCycle - phaseIndex * PHASE_SECONDS;
-    return {
-      phase: PHASE_ORDER[phaseIndex],
-      countdown: Math.min(PHASE_SECONDS, Math.max(1, Math.ceil(PHASE_SECONDS - inPhase))),
-      currentCycle: cycleIndex + 1,
-      remainingSeconds: Math.ceil(breathingTotal - tb),
-    };
-  }, []);
-
-  const start = useCallback(async (cycles: number) => {
+  const start = useCallback(async (cycles: number, mode: SoundMode = 'ambient') => {
     stopTicker();
     stopAudio();
 
-    const ctx = getContext();
-    if (ctx && ctx.state === 'suspended') {
-      // Must be called from a user gesture; ignore failures.
-      ctx.resume().catch(() => {});
-    }
+    // Without sound the session runs on the page's own clock.
+    let now = () => performance.now() / 1000;
+    let t0 = now() + LEAD_SECONDS;
 
-    // Try to have audio ready before the clock starts so the schedule is exact.
-    const buffer = ctx ? await loadBuffer(ctx) : null;
-
-    const useAudioClock = !!(ctx && buffer);
-    const now = () => (useAudioClock ? ctx.currentTime : performance.now() / 1000);
-    const t0 = now() + 0.05; // small lead so the first audio sample isn't in the past
-    const breathingStart = t0 + PRE_START_SECONDS;
-    const sessionEnd = breathingStart + cycles * CYCLE_SECONDS;
-
-    if (ctx && buffer) {
-      if (!masterGainRef.current) {
-        masterGainRef.current = ctx.createGain();
-        masterGainRef.current.connect(ctx.destination);
+    const ctx = mode === 'silent' ? null : getContext();
+    if (ctx) {
+      if (ctx.state === 'suspended') {
+        // Give the browser a moment to start audio; if it won't, carry on silently.
+        await Promise.race([ctx.resume().catch(() => {}), new Promise((r) => setTimeout(r, 800))]);
       }
-      masterGainRef.current.gain.value = mutedRef.current ? 0 : volumeRef.current;
+      const ready = ctx.state === 'running' && (await loadWorklet(ctx));
+      const startTime = ctx.currentTime + LEAD_SECONDS;
+      let node: AudioWorkletNode | null = null;
+      if (ready) {
+        try {
+          node = new AudioWorkletNode(ctx, 'breath-synth', {
+            numberOfInputs: 0,
+            numberOfOutputs: 1,
+            outputChannelCount: [2],
+            processorOptions: { cycles, startTime, mode },
+          });
+        } catch (error) {
+          console.error('Breathing sound unavailable:', error);
+        }
+      }
+      if (node) {
+        if (!masterGainRef.current) {
+          masterGainRef.current = ctx.createGain();
+          masterGainRef.current.connect(ctx.destination);
+        }
+        masterGainRef.current.gain.value = mutedRef.current ? 0 : volumeRef.current;
+        node.connect(masterGainRef.current);
+        const playing = node;
+        playing.port.onmessage = (event) => {
+          if (event.data?.type === 'finished') {
+            playing.disconnect();
+            if (nodeRef.current === playing) nodeRef.current = null;
+          }
+        };
+        nodeRef.current = playing;
 
-      const fadeGain = ctx.createGain();
-      fadeGain.connect(masterGainRef.current);
-      // Gentle fade in at the first inhale and fade out at session end,
-      // so the loop never starts or stops with a click.
-      fadeGain.gain.setValueAtTime(0, breathingStart);
-      fadeGain.gain.linearRampToValueAtTime(1, breathingStart + 0.5);
-      fadeGain.gain.setValueAtTime(1, sessionEnd - 0.75);
-      fadeGain.gain.linearRampToValueAtTime(0, sessionEnd);
-      fadeGainRef.current = fadeGain;
-
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.loop = true;
-      // Stretch (or squeeze) the clip so one loop lasts exactly one 16s cycle.
-      source.playbackRate.value = buffer.duration / CYCLE_SECONDS;
-      source.connect(fadeGain);
-      source.start(breathingStart);
-      source.stop(sessionEnd + 0.05);
-      source.onended = () => {
-        source.disconnect();
-        if (sourceRef.current === source) sourceRef.current = null;
-      };
-      sourceRef.current = source;
+        // The context time being heard right now. getOutputTimestamp() pairs the frame
+        // reaching the speakers with performance.now(); where it isn't available, allow
+        // for the reported output delay instead.
+        const audible = () => {
+          const stamp = typeof ctx.getOutputTimestamp === 'function' ? ctx.getOutputTimestamp() : null;
+          if (stamp && stamp.contextTime !== undefined && stamp.performanceTime && stamp.contextTime > 0) {
+            return stamp.contextTime + (performance.now() - stamp.performanceTime) / 1000;
+          }
+          return ctx.currentTime - (ctx.outputLatency || ctx.baseLatency || 0);
+        };
+        // Audio time arrives in steps; glide on the page clock and let the audio clock
+        // steer it, so motion stays smooth but cannot wander off the sound.
+        let offset = audible() - performance.now() / 1000;
+        now = () => {
+          const page = performance.now() / 1000;
+          offset += (audible() - page - offset) * 0.1;
+          return page + offset;
+        };
+        t0 = startTime;
+      }
     }
 
     runningRef.current = true;
     let last: SessionSnapshot | null = null;
     const tick = () => {
       if (!runningRef.current) return;
-      const next = computeSnapshot(now() - t0, cycles);
+      const frame = computeFrame(now() - t0, cycles);
+      level.set(frame.level);
       if (
         !last ||
-        next.phase !== last.phase ||
-        next.countdown !== last.countdown ||
-        next.remainingSeconds !== last.remainingSeconds ||
-        next.currentCycle !== last.currentCycle
+        frame.phase !== last.phase ||
+        frame.countdown !== last.countdown ||
+        frame.remainingSeconds !== last.remainingSeconds ||
+        frame.currentCycle !== last.currentCycle
       ) {
-        last = next;
-        setSnapshot(next);
+        last = {
+          phase: frame.phase,
+          countdown: frame.countdown,
+          currentCycle: frame.currentCycle,
+          remainingSeconds: frame.remainingSeconds,
+        };
+        setSnapshot(last);
       }
-      if (next.phase === 'completed') {
+      if (frame.phase === 'completed') {
+        // The closing chord rings on; the synth lets go of the output when it fades.
         runningRef.current = false;
         return;
       }
       rafRef.current = requestAnimationFrame(tick);
     };
     tick();
-  }, [computeSnapshot, getContext, loadBuffer, stopAudio, stopTicker]);
+  }, [getContext, level, loadWorklet, stopAudio, stopTicker]);
 
   const stop = useCallback(() => {
     stopTicker();
     stopAudio();
+    level.set(0);
     setSnapshot(IDLE_SNAPSHOT);
-  }, [stopAudio, stopTicker]);
+  }, [level, stopAudio, stopTicker]);
 
   const reset = useCallback(() => {
     stopTicker();
-    stopAudio();
+    level.set(0);
     setSnapshot(IDLE_SNAPSHOT);
-  }, [stopAudio, stopTicker]);
+  }, [level, stopTicker]);
 
   // Keep the gain node - and the refs the audio graph reads from - in step
   // with volume / mute. Mirroring into refs happens here rather than during
@@ -245,13 +299,9 @@ export function useBreathingSession() {
     return () => {
       runningRef.current = false;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      if (sourceRef.current) {
-        try {
-          sourceRef.current.stop();
-        } catch {
-          // already stopped
-        }
-      }
+      nodeRef.current?.disconnect();
+      nodeRef.current = null;
+      workletRef.current = null;
       if (audioCtxRef.current) {
         audioCtxRef.current.close().catch(() => {});
         audioCtxRef.current = null;
@@ -264,6 +314,8 @@ export function useBreathingSession() {
 
   return {
     ...snapshot,
+    level,
+    prime,
     start,
     stop,
     reset,

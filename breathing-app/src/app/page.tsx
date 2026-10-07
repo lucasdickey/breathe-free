@@ -5,7 +5,7 @@ import Balloon from './components/Balloon';
 import AudioControls from './components/AudioControls';
 import CloudBackground from './components/CloudBackground';
 import CycleDropdown from './components/CycleDropdown';
-import { useBreathingSession, BreathingPhase, CYCLE_SECONDS } from './hooks/useBreathingSession';
+import { useBreathingSession, BreathingPhase, CYCLE_SECONDS, SoundMode } from './hooks/useBreathingSession';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const defaultPrompts: { [key: string]: string } = {
@@ -18,16 +18,25 @@ const defaultPrompts: { [key: string]: string } = {
   'completed': 'Be easy, breathe deeply',
 };
 
+const SOUND_OPTIONS: [SoundMode, string][] = [
+  ['ambient', 'Ambient'],
+  ['bells', 'Bells'],
+  ['silent', 'Silent'],
+];
+
 export default function Home() {
   const [cycles, setCycles] = useState(6);
   const [mood, setMood] = useState('');
   const [prompts, setPrompts] = useState(defaultPrompts);
   const [isLoadingPrompts, setIsLoadingPrompts] = useState(false);
+  const [soundMode, setSoundMode] = useState<SoundMode>('ambient');
 
   const {
     phase,
     countdown,
     remainingSeconds,
+    level,
+    prime,
     start,
     stop,
     reset,
@@ -38,6 +47,8 @@ export default function Home() {
   } = useBreathingSession();
 
   const startExercise = async () => {
+    // Unlock audio now, inside the click; fetching prompts below may take a moment.
+    if (soundMode !== 'silent') prime();
     setIsLoadingPrompts(true);
     try {
       if (mood.trim()) {
@@ -63,7 +74,7 @@ export default function Home() {
       setPrompts(defaultPrompts);
     } finally {
       setIsLoadingPrompts(false);
-      start(cycles);
+      start(cycles, soundMode);
     }
   };
 
@@ -141,6 +152,30 @@ export default function Home() {
                 <CycleDropdown value={cycles} onChange={setCycles} />
               </div>
 
+              <div className="mb-8 w-full max-w-sm">
+                <p className="mb-3 text-center text-sm font-medium text-gray-700">Sound</p>
+                <div
+                  role="radiogroup"
+                  aria-label="Sound"
+                  className="flex rounded-full border border-gray-200 bg-white/60 p-1 backdrop-blur-sm"
+                >
+                  {SOUND_OPTIONS.map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      role="radio"
+                      aria-checked={soundMode === value}
+                      onClick={() => setSoundMode(value)}
+                      className={`flex-1 rounded-full px-3 py-2 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 ${
+                        soundMode === value ? 'bg-cyan-600 font-semibold text-white' : 'text-gray-700 hover:bg-white/80'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <button
                 onClick={startExercise}
                 disabled={isLoadingPrompts}
@@ -160,7 +195,7 @@ export default function Home() {
               className="flex flex-col items-center"
             >
               <div className="mt-8">
-                <Balloon breathingState={phase} countdown={0} prompt={getPrompt(phase)} />
+                <Balloon breathingState={phase} countdown={0} prompt={getPrompt(phase)} level={level} />
               </div>
               <button
                 onClick={reset}
@@ -200,7 +235,7 @@ export default function Home() {
                 />
               </div>
               <div className="mt-8">
-                <Balloon breathingState={phase} countdown={countdown} prompt={getPrompt(phase)} />
+                <Balloon breathingState={phase} countdown={countdown} prompt={getPrompt(phase)} level={level} />
               </div>
             </motion.div>
           )}
