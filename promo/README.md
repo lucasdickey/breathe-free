@@ -17,15 +17,25 @@ runs at its true pace and every bell lands on its frame.
    # frames: app/build/promo/android, sound: app/build/promo/audio
    ```
 
+   The test gives the app a phone's status bar and gesture bar, so it lays itself out
+   below them as on a device; the edit draws what the system shows in them.
+
 2. **Mac frames**: the "Promo footage" workflow renders them on a Mac runner
    (`macos-app/Promo/Promo.swift`) and attaches them to the run as
-   `BreatheFree-macOS-promo-frames`.
+   `BreatheFree-macOS-promo-frames`. These are stills, so two things are made whole in
+   the edit: the volume slider (an AppKit control, which the renderer leaves a yellow
+   placeholder for) is painted in, and the session-length circles are cut from the frames
+   and moved on the springs the app's picker uses.
 
-3. **The edit**: `compose.py` puts the frames in a phone or a Mac window on a soft sky,
-   adds the taps or the pointer, the captions and the end card, mixes the sound and encodes
+3. **The edit**: `compose.py` puts the frames in a phone or a Mac window on the app's own
+   sky, pushes in on session length while it is used, adds the taps or the pointer, the
+   captions and the end card, mixes the sound to YouTube's loudness (-14 LUFS) and encodes
    1920x1080, 30 fps H.264 with AAC:
 
    ```bash
    python3 promo/compose.py android <android frames> <audio folder> breathe-free-android.mp4
    python3 promo/compose.py mac <mac frames> <audio folder> breathe-free-mac.mp4
    ```
+
+   Add `--stills=3.6,12.5` to draw just those moments as pictures beside the output, to
+   check the look in seconds before a full encode.

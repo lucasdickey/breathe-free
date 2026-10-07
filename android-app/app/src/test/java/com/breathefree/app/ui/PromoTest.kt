@@ -2,6 +2,7 @@ package com.breathefree.app.ui
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -13,6 +14,9 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.core.app.ApplicationProvider
 import com.breathefree.app.BreatheController
 import com.breathefree.app.core.SoundMode
@@ -29,6 +33,7 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
 /**
@@ -81,6 +86,21 @@ class PromoTest {
         var hour = hourAt(0.0)
         compose.setContent { BreatheApp(controller) { midnight.plusSeconds((hour * 3600).roundToLong()) } }
 
+        // Robolectric has no system bars. Give the app a phone's, a status bar with a camera hole
+        // and a gesture bar, so it lays itself out below them as it does on a device.
+        val density = context.resources.displayMetrics.density
+        val statusBar = (STATUS_BAR_DP * density).roundToInt()
+        val navigationBar = (NAVIGATION_BAR_DP * density).roundToInt()
+        val bars = WindowInsetsCompat.Builder()
+            .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.of(0, statusBar, 0, 0))
+            .setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 0, navigationBar))
+            .build()
+        compose.runOnIdle {
+            val content = compose.activity.findViewById<ViewGroup>(android.R.id.content)
+            ViewCompat.dispatchApplyWindowInsets(content.getChildAt(0), bars)
+        }
+        compose.mainClock.advanceTimeByFrame()
+
         val events = JSONArray()
         fun tap(name: String, node: SemanticsNodeInteraction, v: Double) {
             val bounds = node.fetchSemanticsNode().boundsInRoot
@@ -126,7 +146,10 @@ class PromoTest {
             val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
             File(out, "f%05d.jpg".format(k)).outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 93, it) }
             if (k == 0) {
-                File(out, "size.json").writeText(JSONObject().put("w", bitmap.width).put("h", bitmap.height).toString())
+                File(out, "size.json").writeText(
+                    JSONObject().put("w", bitmap.width).put("h", bitmap.height)
+                        .put("statusBar", statusBar).put("navigationBar", navigationBar).toString(),
+                )
             }
         }
         File(out, "taps.json").writeText(events.toString(2))
@@ -136,5 +159,9 @@ class PromoTest {
     private companion object {
         /** BreatheController's lead between Begin and the session's first moment. */
         const val LEAD_MS = 350L
+
+        /** A phone's status bar with a camera hole, and its gesture bar. */
+        const val STATUS_BAR_DP = 32f
+        const val NAVIGATION_BAR_DP = 24f
     }
 }
