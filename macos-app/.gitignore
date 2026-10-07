@@ -1,0 +1,7 @@
+# Swift package (core tests) and xcodebuild output
+.build/
+.swiftpm/
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
