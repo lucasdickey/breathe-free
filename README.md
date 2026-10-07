@@ -59,7 +59,9 @@ They would become a fourth sound mode alongside Ambient, Bells and Silent.
 ## Builds
 
 Pushing to GitHub runs "Build apps", which tests both apps and attaches a zipped
-`BreatheFree.app` and `app-release.apk` to the run.
+`BreatheFree.app` and `app-release.apk` to the run. The APK is signed with the app's
+permanent key, so from 2.0.1 each version installs over the last; see
+[Signing](android-app/README.md#signing).
 
 ## Web app quick start
 
