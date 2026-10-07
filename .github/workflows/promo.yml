@@ -19,11 +19,11 @@ jobs:
 
       - name: Render
         run: |
-          swiftc -parse-as-library -O -o promo \
+          swiftc -parse-as-library -O -o render-promo \
             macos-app/BreatheFree/Core/*.swift macos-app/BreatheFree/Audio/*.swift \
             macos-app/BreatheFree/Models/*.swift macos-app/BreatheFree/Views/*.swift \
             macos-app/Promo/Promo.swift
-          ./promo promo/script.json frames
+          ./render-promo promo/script.json frames
 
       - uses: actions/upload-artifact@v4
         with:

@@ -7,8 +7,8 @@
 //  own views draw every frame, with the media clock held at the frame's moment. Compiled
 //  together with the app's sources on a Mac:
 //
-//    swiftc -parse-as-library -O -o promo macos-app/BreatheFree/{Core,Audio,Models,Views}/*.swift \
-//      macos-app/Promo/Promo.swift && ./promo promo/script.json <output folder>
+//    swiftc -parse-as-library -O -o render-promo macos-app/BreatheFree/{Core,Audio,Models,Views}/*.swift \
+//      macos-app/Promo/Promo.swift && ./render-promo promo/script.json <output folder>
 //
 
 import AppKit
@@ -101,41 +101,44 @@ struct Promo {
 
         let frames = Int((script.seconds * Double(script.fps)).rounded())
         for k in 0..<frames {
-            let v = Double(k) / Double(script.fps)
-            MediaClock.fixed = v
-            let look = DaySky.look(at: midnight.addingTimeInterval(hour(at: v) * 3600), in: zone)
-            let scene: AnyView
-            if v < script.taps.begin {
-                model.cycles = v >= script.taps.pick ? script.cycles.picked : script.cycles.before
-                let open = v >= script.taps.open && v < script.taps.pick
-                scene = AnyView(ZStack {
-                    StillSky(sky: look.sky, time: v)
-                    HomeView(model: model, choosing: open)
-                })
-            } else {
-                let level = session.plan.frame(at: v - lag).level
-                scene = AnyView(ZStack {
-                    StillSky(sky: look.sky, time: v, level: level)
-                    SessionView(model: model, session: session)
-                })
+            // Let go of each frame's images before drawing the next, not all at the end.
+            autoreleasepool {
+                let v = Double(k) / Double(script.fps)
+                MediaClock.fixed = v
+                let look = DaySky.look(at: midnight.addingTimeInterval(hour(at: v) * 3600), in: zone)
+                let scene: AnyView
+                if v < script.taps.begin {
+                    model.cycles = v >= script.taps.pick ? script.cycles.picked : script.cycles.before
+                    let open = v >= script.taps.open && v < script.taps.pick
+                    scene = AnyView(ZStack {
+                        StillSky(sky: look.sky, time: v)
+                        HomeView(model: model, choosing: open)
+                    })
+                } else {
+                    let level = session.plan.frame(at: v - lag).level
+                    scene = AnyView(ZStack {
+                        StillSky(sky: look.sky, time: v, level: level)
+                        SessionView(model: model, session: session)
+                    })
+                }
+                let renderer = ImageRenderer(content: scene
+                    .environment(\.ink, Ink.matching(look))
+                    .frame(width: size.width, height: size.height))
+                renderer.scale = 1.25
+                guard let image = renderer.cgImage,
+                      let jpeg = NSBitmapImageRep(cgImage: image)
+                          .representation(using: .jpeg, properties: [.compressionFactor: 0.9]) else {
+                    print("could not render frame \(k)")
+                    exit(1)
+                }
+                do {
+                    try jpeg.write(to: folder.appendingPathComponent(String(format: "f%05d.jpg", k)))
+                } catch {
+                    print("could not write frame \(k): \(error)")
+                    exit(1)
+                }
+                if k % 150 == 0 { print("frame \(k) of \(frames)") }
             }
-            let renderer = ImageRenderer(content: scene
-                .environment(\.ink, Ink.matching(look))
-                .frame(width: size.width, height: size.height))
-            renderer.scale = 1.25
-            guard let image = renderer.cgImage,
-                  let jpeg = NSBitmapImageRep(cgImage: image)
-                      .representation(using: .jpeg, properties: [.compressionFactor: 0.9]) else {
-                print("could not render frame \(k)")
-                exit(1)
-            }
-            do {
-                try jpeg.write(to: folder.appendingPathComponent(String(format: "f%05d.jpg", k)))
-            } catch {
-                print("could not write frame \(k): \(error)")
-                exit(1)
-            }
-            if k % 150 == 0 { print("frame \(k) of \(frames)") }
         }
         print("wrote \(frames) frames to \(folder.path)")
     }
