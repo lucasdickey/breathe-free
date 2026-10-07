@@ -33,9 +33,11 @@ export default function Home() {
 
   const {
     phase,
+    previousPhase,
     countdown,
     remainingSeconds,
     level,
+    fade,
     prime,
     start,
     stop,
@@ -195,7 +197,7 @@ export default function Home() {
               className="flex flex-col items-center"
             >
               <div className="mt-8">
-                <Balloon breathingState={phase} countdown={0} prompt={getPrompt(phase)} level={level} />
+                <Balloon breathingState={phase} countdown={0} prompt={getPrompt(phase)} previousPrompt="" level={level} fade={fade} />
               </div>
               <button
                 onClick={reset}
@@ -235,7 +237,14 @@ export default function Home() {
                 />
               </div>
               <div className="mt-8">
-                <Balloon breathingState={phase} countdown={countdown} prompt={getPrompt(phase)} level={level} />
+                <Balloon
+                  breathingState={phase}
+                  countdown={countdown}
+                  prompt={getPrompt(phase)}
+                  previousPrompt={getPrompt(previousPhase)}
+                  level={level}
+                  fade={fade}
+                />
               </div>
             </motion.div>
           )}

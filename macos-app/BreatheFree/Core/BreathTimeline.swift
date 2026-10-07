@@ -26,6 +26,23 @@ enum Stage {
     case settle, breathing, complete
 }
 
+/// The words on screen at one instant, the words before them and the seconds since they
+/// changed, so the screen can cross from one to the other as a function of session time,
+/// like everything else it draws.
+struct Prompt: Equatable {
+    static let fadeSeconds = 0.35
+
+    let text: String
+    let previous: String
+    let since: Double
+
+    /// How far the cross has gone: 0 showing `previous`, 1 showing `text`.
+    var fade: Double {
+        let x = min(max(since / Self.fadeSeconds, 0), 1)
+        return x * x * (3 - 2 * x)
+    }
+}
+
 /// Everything the screen shows at one instant of a session.
 struct BreathFrame {
     let stage: Stage
@@ -88,6 +105,7 @@ struct SessionPlan: Equatable {
     static let cycleSeconds = phaseSeconds * 4
     /// How long the closing chord rings after the last hold.
     static let closingSeconds = 8.0
+    static let settlePrompt = "Settle in"
     static let cycleChoices = [2, 6, 10, 20, 36, 50]
     static let defaultCycles = 10
 
@@ -142,6 +160,20 @@ struct SessionPlan: Equatable {
             countdown: Self.wholeSecondsLeft(Self.phaseSeconds - elapsed, of: Self.phaseSeconds),
             remaining: breathingSeconds - tb
         )
+    }
+
+    /// "Settle in", then each phase's words, then nothing once the session is complete.
+    func prompt(at t: Double) -> Prompt {
+        let f = frame(at: t)
+        switch f.stage {
+        case .settle:
+            return Prompt(text: Self.settlePrompt, previous: "", since: f.phaseElapsed)
+        case .breathing:
+            let previous = f.phaseIndex == 0 ? Self.settlePrompt : Phase(rawValue: (f.phaseIndex - 1) % 4)!.prompt
+            return Prompt(text: f.phase!.prompt, previous: previous, since: f.phaseElapsed)
+        case .complete:
+            return Prompt(text: "", previous: Phase(rawValue: (phaseCount - 1) % 4)!.prompt, since: f.phaseElapsed)
+        }
     }
 
     // 4.0 → 4, 3.5 → 4, 3.0 → 3, ... 0.2 → 1. The epsilon keeps 3.0000000001 from reading 4.

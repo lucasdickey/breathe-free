@@ -12,6 +12,44 @@ class BreathTimelineTest {
     private val plan = SessionPlan(2)
 
     @Test
+    fun theWordsFollowTheBox() {
+        val plan = SessionPlan(2)
+        val seen = listOf(0.0, 3.0, 8.1, 12.2, 16.05, 20.0, 24.0, 39.9, 40.0, 41.0).map { plan.promptAt(it) }
+        assertEquals(
+            listOf(
+                "Settle in" to "", "Settle in" to "", "Breathe in" to "Settle in", "Hold" to "Breathe in",
+                "Breathe out" to "Hold", "Hold" to "Breathe out", "Breathe in" to "Hold", "Hold" to "Breathe out",
+                "" to "Hold", "" to "Hold",
+            ),
+            seen.map { it.text to it.previous },
+        )
+        assertEquals(0.2, plan.promptAt(12.2).since, 1e-9)
+    }
+
+    @Test
+    fun theWordsCrossWithoutAFlash() {
+        // At every change, what was fully showing just before is what starts fading out, and
+        // the new words start from nothing: the screen goes straight from one to the other.
+        val plan = SessionPlan(3)
+        for (i in 0..plan.phaseCount) {
+            val change = if (i < plan.phaseCount) plan.phaseStart(i) else plan.endTime
+            val before = plan.promptAt(change - 1e-6)
+            val after = plan.promptAt(change)
+            assertEquals(1.0, before.fade, 1e-9)
+            assertEquals(before.text, after.previous)
+            assertEquals(0.0, after.fade, 1e-9)
+        }
+        // And the cross is smooth and done in a third of a second.
+        var last = -1.0
+        for (n in 0..40) {
+            val fade = Prompt("Hold", "Breathe in", n * 0.01).fade
+            assertTrue(fade >= last)
+            last = fade
+        }
+        assertEquals(1.0, Prompt("Hold", "Breathe in", Prompt.FADE_SECONDS).fade, 1e-12)
+    }
+
+    @Test
     fun settleCountsDownFromEight() {
         val start = plan.frameAt(0.0)
         assertEquals(Stage.SETTLE, start.stage)

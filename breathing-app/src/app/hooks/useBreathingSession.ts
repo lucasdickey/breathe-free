@@ -22,9 +22,13 @@ const WORKLET_URL = '/worklets/breath-synth.js';
 const PHASE_ORDER: BreathingPhase[] = ['in', 'hold-in', 'out', 'hold-out'];
 // A short lead so the first frame and the first sample both land after "now".
 const LEAD_SECONDS = 0.35;
+/** How long the words take to cross from one phase's to the next. */
+const WORDS_FADE_SECONDS = 0.35;
 
 interface SessionSnapshot {
   phase: BreathingPhase;
+  /** The phase before this one, whose words fade out as this one's fade in. */
+  previousPhase: BreathingPhase;
   countdown: number;
   currentCycle: number; // 1-based while breathing, 0 otherwise
   remainingSeconds: number; // breathing time left (excludes pre-start)
@@ -32,6 +36,7 @@ interface SessionSnapshot {
 
 const IDLE_SNAPSHOT: SessionSnapshot = {
   phase: 'idle',
+  previousPhase: 'idle',
   countdown: 0,
   currentCycle: 0,
   remainingSeconds: 0,
@@ -46,21 +51,31 @@ function rise(p: number): number {
   return 0.5 - 0.5 * Math.cos(Math.PI * q);
 }
 
-/** Pure time → session state. t is seconds since session start. */
-function computeFrame(t: number, cycles: number): SessionSnapshot & { level: number } {
+/** Pure time → session state. t is seconds since session start; since is the seconds since the phase began. */
+function computeFrame(t: number, cycles: number): SessionSnapshot & { level: number; since: number } {
   const breathingTotal = cycles * CYCLE_SECONDS;
   if (t < PRE_START_SECONDS) {
     return {
       phase: 'pre-start',
+      previousPhase: 'idle',
       countdown: Math.min(PRE_START_SECONDS, Math.max(1, Math.ceil(PRE_START_SECONDS - Math.max(0, t) - 1e-9))),
       currentCycle: 0,
       remainingSeconds: breathingTotal,
       level: 0,
+      since: Math.max(0, t),
     };
   }
   const tb = t - PRE_START_SECONDS; // time spent breathing
   if (tb >= breathingTotal) {
-    return { phase: 'completed', countdown: 0, currentCycle: 0, remainingSeconds: 0, level: 0 };
+    return {
+      phase: 'completed',
+      previousPhase: 'hold-out',
+      countdown: 0,
+      currentCycle: 0,
+      remainingSeconds: 0,
+      level: 0,
+      since: tb - breathingTotal,
+    };
   }
   const index = Math.min(cycles * 4 - 1, Math.floor(tb / PHASE_SECONDS));
   const inPhase = tb - index * PHASE_SECONDS;
@@ -69,11 +84,19 @@ function computeFrame(t: number, cycles: number): SessionSnapshot & { level: num
   const level = phase === 'in' ? rise(p) : phase === 'hold-in' ? 1 : phase === 'out' ? 1 - rise(p) : 0;
   return {
     phase,
+    previousPhase: index === 0 ? 'pre-start' : PHASE_ORDER[(index - 1) % 4],
     countdown: Math.min(PHASE_SECONDS, Math.max(1, Math.ceil(PHASE_SECONDS - inPhase - 1e-9))),
     currentCycle: Math.floor(index / 4) + 1,
     remainingSeconds: Math.ceil(breathingTotal - tb - 1e-9),
     level,
+    since: inPhase,
   };
+}
+
+/** How far the words have crossed, 0 → 1, a moment after a phase begins. */
+function wordsFade(since: number): number {
+  const x = Math.min(Math.max(since / WORDS_FADE_SECONDS, 0), 1);
+  return x * x * (3 - 2 * x);
 }
 
 /**
@@ -92,6 +115,8 @@ export function useBreathingSession() {
   const [isMuted, setIsMuted] = useState(false);
   /** How full the lungs are right now, 0..1; updated every frame without re-rendering. */
   const level = useMotionValue(0);
+  /** How far the words have crossed from the last phase's to this one's, 0..1; also per frame. */
+  const fade = useMotionValue(1);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const workletRef = useRef<Promise<boolean> | null>(null);
@@ -239,10 +264,15 @@ export function useBreathingSession() {
 
     runningRef.current = true;
     let last: SessionSnapshot | null = null;
+    // Session time never steps back, even when the audio clock steering it does, so the
+    // words can't flip back to a phase that has just ended.
+    let latest = -Infinity;
     const tick = () => {
       if (!runningRef.current) return;
-      const frame = computeFrame(now() - t0, cycles);
+      latest = Math.max(latest, now() - t0);
+      const frame = computeFrame(latest, cycles);
       level.set(frame.level);
+      fade.set(frame.phase === 'completed' ? 1 : wordsFade(frame.since));
       if (
         !last ||
         frame.phase !== last.phase ||
@@ -252,6 +282,7 @@ export function useBreathingSession() {
       ) {
         last = {
           phase: frame.phase,
+          previousPhase: frame.previousPhase,
           countdown: frame.countdown,
           currentCycle: frame.currentCycle,
           remainingSeconds: frame.remainingSeconds,
@@ -266,20 +297,22 @@ export function useBreathingSession() {
       rafRef.current = requestAnimationFrame(tick);
     };
     tick();
-  }, [getContext, level, loadWorklet, stopAudio, stopTicker]);
+  }, [fade, getContext, level, loadWorklet, stopAudio, stopTicker]);
 
   const stop = useCallback(() => {
     stopTicker();
     stopAudio();
     level.set(0);
+    fade.set(1);
     setSnapshot(IDLE_SNAPSHOT);
-  }, [level, stopAudio, stopTicker]);
+  }, [fade, level, stopAudio, stopTicker]);
 
   const reset = useCallback(() => {
     stopTicker();
     level.set(0);
+    fade.set(1);
     setSnapshot(IDLE_SNAPSHOT);
-  }, [level, stopTicker]);
+  }, [fade, level, stopTicker]);
 
   // Keep the gain node - and the refs the audio graph reads from - in step
   // with volume / mute. Mirroring into refs happens here rather than during
@@ -315,6 +348,7 @@ export function useBreathingSession() {
   return {
     ...snapshot,
     level,
+    fade,
     prime,
     start,
     stop,

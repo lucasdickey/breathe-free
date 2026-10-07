@@ -19,6 +19,24 @@ enum class Phase(val prompt: String) {
 
 enum class Stage { SETTLE, BREATHING, COMPLETE }
 
+/**
+ * The words on screen at one instant, the words before them and the seconds since they
+ * changed, so the screen can cross from one to the other as a function of session time,
+ * like everything else it draws.
+ */
+data class Prompt(val text: String, val previous: String, val since: Double) {
+    /** How far the cross has gone: 0 showing [previous], 1 showing [text]. */
+    val fade: Double
+        get() {
+            val x = (since / FADE_SECONDS).coerceIn(0.0, 1.0)
+            return x * x * (3 - 2 * x)
+        }
+
+    companion object {
+        const val FADE_SECONDS = 0.35
+    }
+}
+
 /** Everything the screen shows at one instant of a session. */
 data class BreathFrame(
     val stage: Stage,
@@ -145,6 +163,20 @@ class SessionPlan(val cycles: Int) {
         )
     }
 
+    /** "Settle in", then each phase's words, then nothing once the session is complete. */
+    fun promptAt(t: Double): Prompt {
+        val f = frameAt(t)
+        return when (f.stage) {
+            Stage.SETTLE -> Prompt(SETTLE_PROMPT, "", f.phaseElapsed)
+            Stage.BREATHING -> Prompt(
+                f.phase!!.prompt,
+                if (f.phaseIndex == 0) SETTLE_PROMPT else Phase.entries[(f.phaseIndex - 1) % 4].prompt,
+                f.phaseElapsed,
+            )
+            Stage.COMPLETE -> Prompt("", Phase.entries[(phaseCount - 1) % 4].prompt, f.phaseElapsed)
+        }
+    }
+
     // 4.0 → 4, 3.5 → 4, 3.0 → 3, ... 0.2 → 1. The epsilon keeps 3.0000000001 from reading 4.
     private fun wholeSecondsLeft(left: Double, full: Double): Int =
         ceil(left - 1e-9).toInt().coerceIn(1, full.toInt())
@@ -156,6 +188,8 @@ class SessionPlan(val cycles: Int) {
 
         /** How long the closing chord rings after the last hold. */
         const val CLOSING_SECONDS = 8.0
+
+        const val SETTLE_PROMPT = "Settle in"
 
         val CYCLE_CHOICES = intArrayOf(2, 6, 10, 20, 36, 50)
         const val DEFAULT_CYCLES = 10

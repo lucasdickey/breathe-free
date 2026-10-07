@@ -1,16 +1,20 @@
 "use client";
 
-import { motion, AnimatePresence, MotionValue, useTransform } from 'framer-motion';
+import { motion, MotionValue, useTransform } from 'framer-motion';
 
 type BalloonProps = {
   breathingState: 'idle' | 'pre-start' | 'in' | 'hold-in' | 'out' | 'hold-out' | 'completed';
   countdown: number;
   prompt: string;
+  /** The words before, fading out as `prompt` fades in. */
+  previousPrompt: string;
   /** How full the lungs are, 0..1, straight from the session clock. */
   level: MotionValue<number>;
+  /** How far the words have crossed from `previousPrompt` to `prompt`, 0..1, from the session clock. */
+  fade: MotionValue<number>;
 };
 
-const Balloon = ({ breathingState, countdown, prompt, level }: BalloonProps) => {
+const Balloon = ({ breathingState, countdown, prompt, previousPrompt, level, fade }: BalloonProps) => {
   const balloonVariants = {
     idle: { backgroundColor: '#ffffff' },
     'pre-start': { backgroundColor: '#06b6d4' },
@@ -24,6 +28,8 @@ const Balloon = ({ breathingState, countdown, prompt, level }: BalloonProps) => 
   // The size is the breath itself, read every frame from the same curve the sound
   // swells with, rather than a tween started when the phase changes.
   const scale = useTransform(level, (l) => 1 + l);
+  const fadingOut = useTransform(fade, (f) => 1 - f);
+  const textColour = ['idle', 'completed'].includes(breathingState) ? 'text-gray-800' : 'text-white';
 
   return (
     <motion.div
@@ -34,18 +40,24 @@ const Balloon = ({ breathingState, countdown, prompt, level }: BalloonProps) => 
       className="relative flex h-64 w-64 items-center justify-center rounded-full shadow-2xl sm:h-64 sm:w-64"
     >
       <div className="absolute flex flex-col items-center justify-center text-center px-4">
-        <AnimatePresence mode="wait">
+        {/* The words before fade out as the new ones fade in, both in the same place and both
+            following the session clock, so nothing moves between them. */}
+        <div className="grid place-items-center">
           <motion.span
-            key={prompt}
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -5 }}
-            transition={{ duration: 0.3 }}
-            className={`text-2xl font-bold ${['idle', 'completed'].includes(breathingState) ? 'text-gray-800' : 'text-white'} text-center`}
+            aria-hidden
+            style={{ opacity: fadingOut, gridArea: '1 / 1' }}
+            className={`text-2xl font-bold ${textColour} text-center`}
+          >
+            {previousPrompt}
+          </motion.span>
+          <motion.span
+            aria-live="polite"
+            style={{ opacity: fade, gridArea: '1 / 1' }}
+            className={`text-2xl font-bold ${textColour} text-center`}
           >
             {prompt}
           </motion.span>
-        </AnimatePresence>
+        </div>
 
         {breathingState !== 'completed' && breathingState !== 'idle' && (
           <motion.span
