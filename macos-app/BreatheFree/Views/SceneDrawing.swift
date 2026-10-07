@@ -10,132 +10,103 @@ import SwiftUI
 
 // MARK: - Colour
 
-struct RGB {
-    var r: Double
-    var g: Double
-    var b: Double
-
-    init(_ hex: UInt32) {
-        r = Double((hex >> 16) & 0xFF) / 255
-        g = Double((hex >> 8) & 0xFF) / 255
-        b = Double(hex & 0xFF) / 255
-    }
-
-    init(r: Double, g: Double, b: Double) {
-        self.r = r
-        self.g = g
-        self.b = b
-    }
-
-    func mix(_ other: RGB, _ t: Double) -> RGB {
-        RGB(r: r + (other.r - r) * t, g: g + (other.g - g) * t, b: b + (other.b - b) * t)
-    }
-
+extension RGB {
     func color(_ opacity: Double = 1) -> Color {
         Color(.sRGB, red: r, green: g, blue: b, opacity: opacity)
     }
 }
 
-enum Ink {
-    static let deep = RGB(0x0F2A43).color()
-    static let soft = RGB(0x3D5A73).color()
-    static let accent = RGB(0x0E5A73).color()
-    static let accentPressed = RGB(0x0A4559).color()
+/// A colour and how opaque it is.
+struct Paint: Equatable {
+    var rgb: RGB
+    var opacity: Double = 1
+
+    init(_ hex: UInt32, _ opacity: Double = 1) {
+        rgb = RGB(hex)
+        self.opacity = opacity
+    }
+
+    init(rgb: RGB, opacity: Double) {
+        self.rgb = rgb
+        self.opacity = opacity
+    }
+
+    var color: Color { rgb.color(opacity) }
+
+    /// This paint made `extra` times as opaque.
+    func color(_ extra: Double) -> Color { rgb.color(opacity * extra) }
+
+    func mix(_ o: Paint, _ t: Double) -> Paint {
+        Paint(rgb: rgb.blend(o.rgb, t), opacity: opacity + (o.opacity - opacity) * t)
+    }
+}
+
+/// Colours for everything drawn on the sky: `onLight` for the daytime sky, `onDark` from dusk
+/// to dawn; `DaySky` says which the sky needs. Kept in step with the Android app's Ink (and
+/// `DaySky.darkText` and `lightText` with the text colours here).
+struct Ink: Equatable {
+    /// Main text.
+    var deep: Paint
+    /// Labels and secondary text.
+    var soft: Paint
+    /// The main button and the chosen option, and text on them.
+    var accent: Paint
+    var accentPressed: Paint
+    var onAccent: Paint
+    /// The options not chosen.
+    var field: Paint
+    var fieldBorder: Paint
+    /// The session's round buttons.
+    var glass: Paint
+    var glassPressed: Paint
+    /// Lines drawn on the sky: the box, its trail, the ripples.
+    var line: Paint
+    /// The dot that travels round the box, and its glow.
+    var dot: Paint
+    var dotGlow: Paint
+    var orb: OrbColors
+
+    /// The countdown on the orb is dark on any sky: white disappears into its lit centre.
     static let countdown = RGB(0x0B3A55)
-}
 
-/// Colours for one mood of the sky. "Lift" colours are where it brightens to on a full breath.
-struct SkyPalette {
-    var top: RGB
-    var mid: RGB
-    var bottom: RGB
-    var liftTop: RGB
-    var liftMid: RGB
-    var liftBottom: RGB
-    var cloud: RGB
-    var cloudAlpha: Double
+    static let onLight = Ink(
+        deep: Paint(0x0F2A43), soft: Paint(0x2E4A63),
+        accent: Paint(0x0E5A73), accentPressed: Paint(0x0A4559), onAccent: Paint(0xFFFFFF),
+        field: Paint(0xFFFFFF, 0.55), fieldBorder: Paint(0xFFFFFF, 0.85),
+        glass: Paint(0xFFFFFF, 0.45), glassPressed: Paint(0xFFFFFF, 0.7),
+        line: Paint(0x0F2A43), dot: Paint(0x0E5A73), dotGlow: Paint(0x7FD6EE), orb: .day
+    )
 
-    init(top: RGB, mid: RGB, bottom: RGB, lift: (RGB, RGB, RGB)? = nil, cloud: RGB, cloudAlpha: Double) {
-        self.top = top
-        self.mid = mid
-        self.bottom = bottom
-        liftTop = lift?.0 ?? top
-        liftMid = lift?.1 ?? mid
-        liftBottom = lift?.2 ?? bottom
-        self.cloud = cloud
-        self.cloudAlpha = cloudAlpha
-    }
+    static let onDark = Ink(
+        deep: Paint(0xFFFFFF), soft: Paint(0xD3DEEC),
+        accent: Paint(0xFFFFFF, 0.94), accentPressed: Paint(0xFFFFFF, 0.78), onAccent: Paint(0x0F2A43),
+        field: Paint(0xFFFFFF, 0.12), fieldBorder: Paint(0xFFFFFF, 0.35),
+        glass: Paint(0xFFFFFF, 0.12), glassPressed: Paint(0xFFFFFF, 0.24),
+        line: Paint(0xFFFFFF), dot: Paint(0xFFFFFF), dotGlow: Paint(0xBDF3FA), orb: .night
+    )
 
-    func mix(_ o: SkyPalette, _ t: Double) -> SkyPalette {
-        var p = self
-        p.top = top.mix(o.top, t)
-        p.mid = mid.mix(o.mid, t)
-        p.bottom = bottom.mix(o.bottom, t)
-        p.liftTop = liftTop.mix(o.liftTop, t)
-        p.liftMid = liftMid.mix(o.liftMid, t)
-        p.liftBottom = liftBottom.mix(o.liftBottom, t)
-        p.cloud = cloud.mix(o.cloud, t)
-        p.cloudAlpha = cloudAlpha + (o.cloudAlpha - cloudAlpha) * t
-        return p
+    /// The colours for `look`, with secondary text held readable (`DayLook.softness`).
+    static func matching(_ look: DayLook) -> Ink {
+        var ink = look.dark ? onDark : onLight
+        if look.softness < 1 { ink.soft = ink.deep.mix(ink.soft, look.softness) }
+        return ink
     }
 }
 
-enum SkyMood {
-    case day, dusk, dawn
-
-    var palette: SkyPalette {
-        switch self {
-        case .day:
-            // Home: a clear daytime sky.
-            return SkyPalette(top: RGB(0x9FCFF2), mid: RGB(0xCBE6F8), bottom: RGB(0xEEF7FD),
-                              cloud: RGB(0xFFFFFF), cloudAlpha: 0.85)
-        case .dusk:
-            // During a session: dusk, brightening a little as the lungs fill.
-            return SkyPalette(top: RGB(0x081A33), mid: RGB(0x12375C), bottom: RGB(0x23607F),
-                              lift: (RGB(0x0E2A52), RGB(0x1C4F7E), RGB(0x317C9B)),
-                              cloud: RGB(0xAFC3E0), cloudAlpha: 0.30)
-        case .dawn:
-            // Finished: first light.
-            return SkyPalette(top: RGB(0x1D3B66), mid: RGB(0x5F86B5), bottom: RGB(0xF0C9A9),
-                              cloud: RGB(0xFFE8DA), cloudAlpha: 0.55)
-        }
-    }
+private struct InkKey: EnvironmentKey {
+    static let defaultValue = Ink.onLight
 }
 
-/// Eases the sky from one mood to another, restarting cleanly if retargeted mid-way.
-final class PaletteTransition {
-    private var from: SkyPalette
-    private var to: SkyMood
-    private var start: Double = 0
-    private var settled = true
-    private let seconds = 1.8
-
-    init(_ mood: SkyMood) {
-        from = mood.palette
-        to = mood
-    }
-
-    func retarget(_ mood: SkyMood, at now: Double) {
-        guard mood != to else { return }
-        from = palette(at: now)
-        to = mood
-        start = now
-        settled = false
-    }
-
-    func palette(at now: Double) -> SkyPalette {
-        if settled { return to.palette }
-        let x = min(max((now - start) / seconds, 0), 1)
-        if x >= 1 {
-            settled = true
-            return to.palette
-        }
-        return from.mix(to.palette, x * x * (3 - 2 * x))
+extension EnvironmentValues {
+    /// The colours that read well on the sky behind, set once at the top of the window.
+    var ink: Ink {
+        get { self[InkKey.self] }
+        set { self[InkKey.self] = newValue }
     }
 }
 
 /// Orb colours, from empty lungs (low) to full (high).
-struct OrbColors {
+struct OrbColors: Equatable {
     let coreLow: RGB
     let coreHigh: RGB
     let edgeLow: RGB
@@ -294,6 +265,43 @@ final class CloudField {
     }
 }
 
+/// A fixed scatter of stars, more of them high up, twinkling slowly; `amount` (the palette's
+/// stars) fades them in through dusk and out at dawn. The same stars as the Android app's.
+final class StarField {
+    static let shared = StarField()
+
+    private struct Star {
+        let x, y, radius, brightness, speed, phase: Double
+    }
+
+    private let stars: [Star]
+
+    init(seed: UInt32 = 7031, count: Int = 90) {
+        var rand = Mulberry32(seed: seed)
+        var made: [Star] = []
+        for _ in 0..<count {
+            let x = rand.next()
+            let y = pow(rand.next(), 1.4) * 0.75
+            let radius = 0.45 + pow(rand.next(), 3) * 1.1 // mostly faint, a few bright
+            let brightness = 0.35 + rand.next() * 0.6
+            let speed = 0.4 + rand.next() * 1.2
+            let phase = rand.next() * 2 * .pi
+            made.append(Star(x: x, y: y, radius: radius, brightness: brightness, speed: speed, phase: phase))
+        }
+        stars = made
+    }
+
+    func draw(in context: inout GraphicsContext, size: CGSize, time t: Double, amount: Double) {
+        guard amount > 0.01 else { return }
+        for s in stars {
+            let twinkle = 0.7 + 0.3 * sin(t * s.speed + s.phase)
+            let alpha = min(max(amount * s.brightness * twinkle, 0), 1)
+            let centre = CGPoint(x: s.x * Double(size.width), y: s.y * Double(size.height))
+            context.fill(Path(ellipseIn: SceneDrawing.circle(centre, s.radius)), with: .color(Color.white.opacity(alpha)))
+        }
+    }
+}
+
 // MARK: - Session scene
 
 /// Where the box and orb sit, in points. The text layout uses the same numbers.
@@ -320,11 +328,11 @@ struct SceneGeometry {
 enum SceneDrawing {
     private static let ripplesLast = 2.4
 
+    /// The sky's gradient. A full breath (`level` 1) brightens it: plainly at night, barely by day.
     static func sky(_ context: inout GraphicsContext, size: CGSize, palette p: SkyPalette, level: Double) {
-        let lift = level * 0.65
-        let gradient = Gradient(colors: [p.top.mix(p.liftTop, lift).color(),
-                                         p.mid.mix(p.liftMid, lift).color(),
-                                         p.bottom.mix(p.liftBottom, lift).color()])
+        let k = 0.55 * level * (1 - p.mid.luminance)
+        let gradient = Gradient(colors: [p.top.brightened(k).color(), p.mid.brightened(k).color(),
+                                         p.bottom.brightened(k).color()])
         context.fill(Path(CGRect(origin: .zero, size: size)),
                      with: .linearGradient(gradient, startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
     }
@@ -367,32 +375,34 @@ enum SceneDrawing {
     }
 
     /// The box, the trail of the current cycle, the ripples, the orb and the travelling dot
-    /// for one instant of a session. `t` is session time in seconds.
-    static func session(_ context: inout GraphicsContext, geometry g: SceneGeometry, frame: BreathFrame, time t: Double) {
+    /// for one instant of a session, in the colours `ink` has for the sky. `t` is session time
+    /// in seconds.
+    static func session(_ context: inout GraphicsContext, geometry g: SceneGeometry, frame: BreathFrame, time t: Double,
+                        ink: Ink) {
         let settling = frame.stage == .settle
         let line = StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round)
 
         // The outline draws itself during the first seconds of the settle.
         let outline = settling ? BreathCurve.rise(t / 2.5) : 1
-        context.stroke(boxPath(g, to: 4 * outline), with: .color(Color.white.opacity(0.16)), style: line)
+        context.stroke(boxPath(g, to: 4 * outline), with: .color(ink.line.color(0.18)), style: line)
 
         let side = frame.boxSide
         let along = frame.boxFraction
         if frame.stage == .breathing {
-            context.stroke(boxPath(g, to: Double(side) + along), with: .color(Color.white.opacity(0.5)),
+            context.stroke(boxPath(g, to: Double(side) + along), with: .color(ink.line.color(0.5)),
                            style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
             // Ripples: a ring leaves the orb at each change of phase.
             if let phase = frame.phase {
-                ripple(&context, g, phase: phase, age: frame.phaseElapsed)
+                ripple(&context, g, phase: phase, age: frame.phaseElapsed, color: ink.line)
                 if frame.phaseIndex > 0, let previous = Phase(rawValue: (frame.phaseIndex - 1) % 4) {
-                    ripple(&context, g, phase: previous, age: frame.phaseElapsed + SessionPlan.phaseSeconds)
+                    ripple(&context, g, phase: previous, age: frame.phaseElapsed + SessionPlan.phaseSeconds, color: ink.line)
                 }
             }
         }
 
         let orbAlpha = settling ? min(max(t / 1.2, 0), 1) : 1
         orb(&context, center: CGPoint(x: g.cx, y: g.cy), radius: g.orbRadius(frame.level), level: frame.level,
-            colors: .night, alpha: orbAlpha)
+            colors: ink.orb, alpha: orbAlpha)
 
         // The dot fades in at the start corner as the settle ends.
         let dotAlpha: Double
@@ -404,21 +414,21 @@ enum SceneDrawing {
         if dotAlpha > 0 {
             let p = BoxGeometry.point(side: side, f: along, cx: g.cx, cy: g.cy, h: g.half, r: g.corner)
             let centre = CGPoint(x: p.x, y: p.y)
-            let glow = RGB(0xBDF3FA)
+            let glow = ink.dotGlow.rgb
             context.fill(Path(ellipseIn: circle(centre, 16)),
                          with: .radialGradient(Gradient(colors: [glow.color(0.7 * dotAlpha), glow.color(0)]),
                                                center: centre, startRadius: 0, endRadius: 16))
-            context.fill(Path(ellipseIn: circle(centre, 5)), with: .color(Color.white.opacity(dotAlpha)))
+            context.fill(Path(ellipseIn: circle(centre, 5)), with: .color(ink.dot.color(dotAlpha)))
         }
     }
 
-    private static func ripple(_ context: inout GraphicsContext, _ g: SceneGeometry, phase: Phase, age: Double) {
+    private static func ripple(_ context: inout GraphicsContext, _ g: SceneGeometry, phase: Phase, age: Double, color: Paint) {
         guard age < ripplesLast else { return }
         let startRadius = (phase == .inhale || phase == .holdEmpty) ? g.orbMin : g.orbMax
         let strength = (phase == .inhale || phase == .exhale) ? 0.32 : 0.2
         let fade = 1 - age / ripplesLast
         context.stroke(Path(ellipseIn: circle(CGPoint(x: g.cx, y: g.cy), startRadius + age * g.half * 0.3)),
-                       with: .color(Color.white.opacity(strength * fade * fade)), lineWidth: 1.5)
+                       with: .color(color.color(strength * fade * fade)), lineWidth: 1.5)
     }
 
     /// The outline from its start (the middle of the bottom-left corner) to quarter-position

@@ -2,8 +2,8 @@
 //  SkyView.swift
 //  BreatheFree
 //
-//  The living sky behind every screen: day at home, dusk during a session (brightening
-//  as the lungs fill), first light when finished.
+//  The living sky behind every screen. It follows the time of day (DaySky), with stars at
+//  night, and brightens a little during a session as the lungs fill.
 //
 
 import SwiftUI
@@ -11,31 +11,22 @@ import QuartzCore
 
 struct SkyView: View {
     @ObservedObject var model: SessionModel
+    let sky: SkyPalette
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var transition = PaletteTransition(.day)
-
-    private var mood: SkyMood {
-        switch model.screen {
-        case .home: return .day
-        case .session: return .dusk
-        case .done: return .dawn
-        }
-    }
 
     var body: some View {
         TimelineView(.animation) { _ in
             Canvas { context, size in
                 let now = CACurrentMediaTime()
-                transition.retarget(mood, at: now)
-                let palette = transition.palette(at: now)
                 var level = 0.0
                 if model.screen == .session, let active = model.session {
                     level = active.plan.frame(at: active.time(at: now + SessionView.displayLead)).level
                 }
-                SceneDrawing.sky(&context, size: size, palette: palette, level: level)
+                let t = reduceMotion ? 0 : now
+                SceneDrawing.sky(&context, size: size, palette: sky, level: level)
+                StarField.shared.draw(in: &context, size: size, time: t, amount: sky.stars)
                 let sprite = context.resolve(Image(decorative: CloudField.puff, scale: 1))
-                CloudField.shared.draw(in: &context, size: size, time: reduceMotion ? 0 : now,
-                                       palette: palette, sprite: sprite)
+                CloudField.shared.draw(in: &context, size: size, time: t, palette: sky, sprite: sprite)
             }
         }
         .ignoresSafeArea()

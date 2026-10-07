@@ -10,6 +10,7 @@
 		AA0000010000000000000001 /* BreatheFreeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000020000000000000001 /* BreatheFreeApp.swift */; };
 		AA0000030000000000000001 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000040000000000000001 /* ContentView.swift */; };
 		AA00002A0000000000000001 /* BreathTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00002B0000000000000001 /* BreathTimeline.swift */; };
+		AA0000400000000000000001 /* DaySky.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000410000000000000001 /* DaySky.swift */; };
 		AA00002C0000000000000001 /* BreathSynth.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00002D0000000000000001 /* BreathSynth.swift */; };
 		AA00002E0000000000000001 /* SessionAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00002F0000000000000001 /* SessionAudio.swift */; };
 		AA0000300000000000000001 /* SessionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000310000000000000001 /* SessionModel.swift */; };
@@ -28,6 +29,7 @@
 		AA0000020000000000000001 /* BreatheFreeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreatheFreeApp.swift; sourceTree = "<group>"; };
 		AA0000040000000000000001 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AA00002B0000000000000001 /* BreathTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreathTimeline.swift; sourceTree = "<group>"; };
+		AA0000410000000000000001 /* DaySky.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaySky.swift; sourceTree = "<group>"; };
 		AA00002D0000000000000001 /* BreathSynth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreathSynth.swift; sourceTree = "<group>"; };
 		AA00002F0000000000000001 /* SessionAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAudio.swift; sourceTree = "<group>"; };
 		AA0000310000000000000001 /* SessionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionModel.swift; sourceTree = "<group>"; };
@@ -121,6 +123,7 @@
 			children = (
 				AA00002B0000000000000001 /* BreathTimeline.swift */,
 				AA00002D0000000000000001 /* BreathSynth.swift */,
+				AA0000410000000000000001 /* DaySky.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -197,6 +200,7 @@
 				AA0000010000000000000001 /* BreatheFreeApp.swift in Sources */,
 				AA0000030000000000000001 /* ContentView.swift in Sources */,
 				AA00002A0000000000000001 /* BreathTimeline.swift in Sources */,
+				AA0000400000000000000001 /* DaySky.swift in Sources */,
 				AA00002C0000000000000001 /* BreathSynth.swift in Sources */,
 				AA00002E0000000000000001 /* SessionAudio.swift in Sources */,
 				AA0000300000000000000001 /* SessionModel.swift in Sources */,
@@ -339,7 +343,7 @@
 				CODE_SIGN_ENTITLEMENTS = BreatheFree/BreatheFree.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -351,7 +355,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 2.0;
+				MARKETING_VERSION = 2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.breathefree.macos;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -367,7 +371,7 @@
 				CODE_SIGN_ENTITLEMENTS = BreatheFree/BreatheFree.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -379,7 +383,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 2.0;
+				MARKETING_VERSION = 2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.breathefree.macos;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

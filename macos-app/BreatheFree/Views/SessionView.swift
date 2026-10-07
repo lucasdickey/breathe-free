@@ -13,6 +13,7 @@ struct SessionView: View {
     @ObservedObject var model: SessionModel
     let session: ActiveSession
     @State private var showVolume = false
+    @Environment(\.ink) private var ink
 
     /// A frame drawn now reaches the screen about one refresh later; aim the picture there.
     static let displayLead = 1.0 / 60.0
@@ -25,7 +26,7 @@ struct SessionView: View {
                 let frame = session.plan.frame(at: t)
                 ZStack {
                     Canvas { context, _ in
-                        SceneDrawing.session(&context, geometry: g, frame: frame, time: t)
+                        SceneDrawing.session(&context, geometry: g, frame: frame, time: t, ink: ink)
                     }
                     .accessibilityHidden(true)
 
@@ -41,7 +42,7 @@ struct SessionView: View {
                     let prompt = Self.prompt(for: frame)
                     Text(prompt)
                         .font(.system(size: 30, weight: .light))
-                        .foregroundColor(.white)
+                        .foregroundColor(ink.deep.color)
                         .id(prompt)
                         .transition(.opacity.animation(.easeInOut(duration: 0.35)))
                         .position(x: g.cx, y: g.cy + g.half + 58)
@@ -50,14 +51,14 @@ struct SessionView: View {
                     if frame.stage == .settle {
                         Text("Soften your shoulders and jaw")
                             .font(.system(size: 15))
-                            .foregroundColor(.white.opacity(0.65))
+                            .foregroundColor(ink.soft.color)
                             .position(x: g.cx, y: g.cy + g.half + 96)
                     }
 
                     VStack(spacing: 10) {
                         Text(frame.stage == .settle ? "Starting soon" : "Cycle \(min(frame.cycle + 1, session.plan.cycles)) of \(session.plan.cycles)")
                             .font(.system(size: 13))
-                            .foregroundColor(.white.opacity(0.6))
+                            .foregroundColor(ink.soft.color)
                         progressBar(done: 1 - frame.remaining / session.plan.breathingSeconds)
                     }
                     .frame(maxHeight: .infinity, alignment: .bottom)
@@ -65,7 +66,7 @@ struct SessionView: View {
 
                     Text(clockText(Int((frame.remaining - 1e-9).rounded(.up))))
                         .font(.system(size: 15).monospacedDigit())
-                        .foregroundColor(.white.opacity(0.85))
+                        .foregroundColor(ink.deep.color)
                         .frame(maxHeight: .infinity, alignment: .top)
                         .padding(.top, 22)
                         .accessibilityLabel("\(clockText(Int(frame.remaining.rounded(.up)))) left")
@@ -107,8 +108,8 @@ struct SessionView: View {
 
     private func progressBar(done: Double) -> some View {
         ZStack(alignment: .leading) {
-            Capsule().fill(Color.white.opacity(0.18))
-            Capsule().fill(Color.white.opacity(0.7)).frame(width: 160 * min(max(done, 0), 1))
+            Capsule().fill(ink.line.color(0.18))
+            Capsule().fill(ink.line.color(0.7)).frame(width: 160 * min(max(done, 0), 1))
         }
         .frame(width: 160, height: 3)
     }
