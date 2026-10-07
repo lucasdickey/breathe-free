@@ -52,6 +52,14 @@ class OrbColors(
             edgeLow = Color(0xFF2B95C2), edgeHigh = Color(0xFF3FB8D9),
             glow = Color(0xFF7FD6EE),
         )
+
+        fun between(a: OrbColors, b: OrbColors, t: Float) = OrbColors(
+            coreLow = lerp(a.coreLow, b.coreLow, t),
+            coreHigh = lerp(a.coreHigh, b.coreHigh, t),
+            edgeLow = lerp(a.edgeLow, b.edgeLow, t),
+            edgeHigh = lerp(a.edgeHigh, b.edgeHigh, t),
+            glow = lerp(a.glow, b.glow, t),
+        )
     }
 }
 
@@ -96,14 +104,15 @@ fun DrawScope.drawOrb(center: Offset, radius: Float, level: Float, colors: OrbCo
 
 /**
  * Draws the box, the trail of the current cycle, the travelling dot, the ripples and the orb
- * for one instant of a session. [t] is session time in seconds.
+ * for one instant of a session, in the colours [ink] has for the sky. [t] is session time in
+ * seconds.
  */
 class SessionPainter {
     private val outline = Path()
     private val trail = Path()
     private val point = DoubleArray(2)
 
-    fun draw(scope: DrawScope, g: SceneGeometry, plan: SessionPlan, frame: BreathFrame, t: Double) = with(scope) {
+    fun draw(scope: DrawScope, g: SceneGeometry, plan: SessionPlan, frame: BreathFrame, t: Double, ink: Ink) = with(scope) {
         val settling = frame.stage == Stage.SETTLE
         val cx = g.cx.toDouble()
         val cy = g.cy.toDouble()
@@ -115,7 +124,7 @@ class SessionPainter {
         buildPath(outline, 0.0, 4.0 * outlineFraction, cx, cy, h, r)
         drawPath(
             outline,
-            Color.White.copy(alpha = 0.16f),
+            ink.line.copy(alpha = 0.18f),
             style = Stroke(width = density * 1.5f, cap = StrokeCap.Round, join = StrokeJoin.Round),
         )
 
@@ -125,19 +134,21 @@ class SessionPainter {
             buildPath(trail, 0.0, side + along, cx, cy, h, r)
             drawPath(
                 trail,
-                Color.White.copy(alpha = 0.5f),
+                ink.line.copy(alpha = 0.5f),
                 style = Stroke(width = density * 2.2f, cap = StrokeCap.Round, join = StrokeJoin.Round),
             )
         }
 
         // Ripples: a ring leaves the orb at each change of phase.
         if (frame.stage == Stage.BREATHING) {
-            ripple(g, frame.phase!!, frame.phaseElapsed)
-            if (frame.phaseIndex > 0) ripple(g, Phase.entries[(frame.phaseIndex - 1) % 4], frame.phaseElapsed + SessionPlan.PHASE_SECONDS)
+            ripple(g, frame.phase!!, frame.phaseElapsed, ink.line)
+            if (frame.phaseIndex > 0) {
+                ripple(g, Phase.entries[(frame.phaseIndex - 1) % 4], frame.phaseElapsed + SessionPlan.PHASE_SECONDS, ink.line)
+            }
         }
 
         val orbAlpha = if (settling) (t / 1.2).coerceIn(0.0, 1.0).toFloat() else 1f
-        drawOrb(Offset(g.cx, g.cy), g.orbRadius(frame.level), frame.level.toFloat(), OrbColors.Night, orbAlpha)
+        drawOrb(Offset(g.cx, g.cy), g.orbRadius(frame.level), frame.level.toFloat(), ink.orb, orbAlpha)
 
         // The dot: fades in at the start corner as the settle ends.
         val dotAlpha = when {
@@ -151,25 +162,25 @@ class SessionPainter {
             val glow = density * 16f
             drawCircle(
                 brush = Brush.radialGradient(
-                    0f to Color(0xFFBDF3FA).copy(alpha = 0.7f * dotAlpha),
-                    1f to Color(0xFFBDF3FA).copy(alpha = 0f),
+                    0f to ink.dotGlow.copy(alpha = 0.7f * dotAlpha),
+                    1f to ink.dotGlow.copy(alpha = 0f),
                     center = p,
                     radius = glow,
                 ),
                 radius = glow,
                 center = p,
             )
-            drawCircle(Color.White.copy(alpha = dotAlpha), radius = density * 5f, center = p)
+            drawCircle(ink.dot.copy(alpha = dotAlpha), radius = density * 5f, center = p)
         }
     }
 
-    private fun DrawScope.ripple(g: SceneGeometry, phase: Phase, age: Double) {
+    private fun DrawScope.ripple(g: SceneGeometry, phase: Phase, age: Double, color: Color) {
         if (age >= RIPPLE_SECONDS) return
         val startRadius = if (phase == Phase.INHALE || phase == Phase.HOLD_EMPTY) g.orbMin else g.orbMax
         val strength = if (phase == Phase.INHALE || phase == Phase.EXHALE) 0.32f else 0.2f
         val fade = (1 - age / RIPPLE_SECONDS).toFloat()
         drawCircle(
-            color = Color.White.copy(alpha = strength * fade * fade),
+            color = color.copy(alpha = strength * fade * fade),
             radius = startRadius + (age * g.half * 0.3).toFloat(),
             center = Offset(g.cx, g.cy),
             style = Stroke(width = density * 1.5f),
