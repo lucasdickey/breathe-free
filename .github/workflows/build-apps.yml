@@ -38,6 +38,22 @@ jobs:
           name: BreatheFree-macOS
           path: macos-app/build/Release/BreatheFree-macOS.zip
 
+      - name: Render screens
+        continue-on-error: true
+        run: |
+          mkdir -p screens
+          swiftc -parse-as-library -o snapshots \
+            macos-app/BreatheFree/Core/*.swift macos-app/BreatheFree/Audio/*.swift \
+            macos-app/BreatheFree/Models/*.swift macos-app/BreatheFree/Views/*.swift \
+            macos-app/Snapshots/Snapshots.swift
+          ./snapshots screens
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BreatheFree-macOS-screens
+          path: screens
+          if-no-files-found: ignore
+
   android:
     name: Android app
     runs-on: ubuntu-latest

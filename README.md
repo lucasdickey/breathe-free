@@ -16,10 +16,11 @@ native Android app replaces it.
 All three are built the same way, so they sound and keep time alike.
 
 **One clock.** A session is laid out on a single time axis: an 8 second settle, then
-16 second cycles. Every frame works out the phase, the countdown, the size of the orb
-and the position of the dot on the box from elapsed time alone (`BreathTimeline`).
-Nothing counts ticks, so nothing drifts, and a frame that arrives late simply shows the
-right moment.
+16 second cycles. Every frame works out the phase, the countdown and the size of the
+orb (and, in the native apps, the dot on the box) from elapsed time alone
+(`BreathTimeline` in the native apps, `computeFrame` in the web app's
+`useBreathingSession`). Nothing counts ticks, so nothing drifts, and a frame that
+arrives late simply shows the right moment.
 
 **Generated sound.** Instead of a looped recording stretched to fit, the sound is
 computed sample by sample from the same breath curve the picture uses (`BreathSynth`):
