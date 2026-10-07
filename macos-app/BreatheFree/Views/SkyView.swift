@@ -9,6 +9,14 @@
 import SwiftUI
 import QuartzCore
 
+/// The clock the views animate by. In the app it is the media clock; the promo renderer sets
+/// `fixed` to draw any moment it chooses.
+enum MediaClock {
+    static var fixed: Double?
+
+    static func now() -> Double { fixed ?? CACurrentMediaTime() }
+}
+
 struct SkyView: View {
     @ObservedObject var model: SessionModel
     let sky: SkyPalette
@@ -17,7 +25,7 @@ struct SkyView: View {
     var body: some View {
         TimelineView(.animation) { _ in
             Canvas { context, size in
-                let now = CACurrentMediaTime()
+                let now = MediaClock.now()
                 var level = 0.0
                 if model.screen == .session, let active = model.session {
                     level = active.plan.frame(at: active.time(at: now + SessionView.displayLead)).level
@@ -43,7 +51,7 @@ struct AmbientOrb: View {
     var body: some View {
         TimelineView(.animation) { _ in
             Canvas { context, size in
-                let t = CACurrentMediaTime()
+                let t = MediaClock.now()
                 let level = depth * (0.5 - 0.5 * cos(2 * .pi * t / period))
                 let side = Double(min(size.width, size.height))
                 SceneDrawing.orb(&context, center: CGPoint(x: size.width / 2, y: size.height / 2),

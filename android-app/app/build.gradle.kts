@@ -75,6 +75,7 @@ dependencies {
 
 tasks.withType<Test>().configureEach {
     systemProperty("screenshots", providers.gradleProperty("screenshots").isPresent.toString())
+    systemProperty("promo", providers.gradleProperty("promo").isPresent.toString())
     providers.gradleProperty("robolectricRepo").orNull?.let { systemProperty("robolectric.dependency.repo.url", it) }
     // Robolectric's Android 16 runtime reaches into this JDK package.
     jvmArgs("--add-opens=java.base/jdk.internal.access=ALL-UNNAMED")

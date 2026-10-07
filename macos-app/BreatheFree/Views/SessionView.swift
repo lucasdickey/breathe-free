@@ -22,7 +22,7 @@ struct SessionView: View {
         GeometryReader { geo in
             let g = SceneGeometry.of(geo.size)
             TimelineView(.animation) { _ in
-                let t = session.time(at: CACurrentMediaTime() + Self.displayLead)
+                let t = session.time(at: MediaClock.now() + Self.displayLead)
                 let frame = session.plan.frame(at: t)
                 ZStack {
                     Canvas { context, _ in
