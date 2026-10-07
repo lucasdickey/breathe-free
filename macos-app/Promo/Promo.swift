@@ -110,9 +110,13 @@ struct Promo {
                 if v < script.taps.begin {
                     model.cycles = v >= script.taps.pick ? script.cycles.picked : script.cycles.before
                     let open = v >= script.taps.open && v < script.taps.pick
+                    // Session length moves from its last open or pick, as it does when clicked.
+                    let before = SessionPlan.cycleChoices.firstIndex(of: script.cycles.before) ?? 0
+                    let changed: Double? = v >= script.taps.pick ? script.taps.pick : v >= script.taps.open ? script.taps.open : nil
                     scene = AnyView(ZStack {
                         StillSky(sky: look.sky, time: v)
                         HomeView(model: model, choosing: open)
+                            .environment(\.pickerMoment, changed.map { PickerMoment(changedAt: $0, previous: before) })
                     })
                 } else {
                     let level = session.plan.frame(at: v - lag).level

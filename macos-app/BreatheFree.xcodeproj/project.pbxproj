@@ -11,6 +11,7 @@
 		AA0000030000000000000001 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000040000000000000001 /* ContentView.swift */; };
 		AA00002A0000000000000001 /* BreathTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00002B0000000000000001 /* BreathTimeline.swift */; };
 		AA0000400000000000000001 /* DaySky.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000410000000000000001 /* DaySky.swift */; };
+		AA0000420000000000000001 /* LiquidPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000430000000000000001 /* LiquidPicker.swift */; };
 		AA00002C0000000000000001 /* BreathSynth.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00002D0000000000000001 /* BreathSynth.swift */; };
 		AA00002E0000000000000001 /* SessionAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00002F0000000000000001 /* SessionAudio.swift */; };
 		AA0000300000000000000001 /* SessionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000310000000000000001 /* SessionModel.swift */; };
@@ -30,6 +31,7 @@
 		AA0000040000000000000001 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AA00002B0000000000000001 /* BreathTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreathTimeline.swift; sourceTree = "<group>"; };
 		AA0000410000000000000001 /* DaySky.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaySky.swift; sourceTree = "<group>"; };
+		AA0000430000000000000001 /* LiquidPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidPicker.swift; sourceTree = "<group>"; };
 		AA00002D0000000000000001 /* BreathSynth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreathSynth.swift; sourceTree = "<group>"; };
 		AA00002F0000000000000001 /* SessionAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAudio.swift; sourceTree = "<group>"; };
 		AA0000310000000000000001 /* SessionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionModel.swift; sourceTree = "<group>"; };
@@ -124,6 +126,7 @@
 				AA00002B0000000000000001 /* BreathTimeline.swift */,
 				AA00002D0000000000000001 /* BreathSynth.swift */,
 				AA0000410000000000000001 /* DaySky.swift */,
+				AA0000430000000000000001 /* LiquidPicker.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -201,6 +204,7 @@
 				AA0000030000000000000001 /* ContentView.swift in Sources */,
 				AA00002A0000000000000001 /* BreathTimeline.swift in Sources */,
 				AA0000400000000000000001 /* DaySky.swift in Sources */,
+				AA0000420000000000000001 /* LiquidPicker.swift in Sources */,
 				AA00002C0000000000000001 /* BreathSynth.swift in Sources */,
 				AA00002E0000000000000001 /* SessionAudio.swift in Sources */,
 				AA0000300000000000000001 /* SessionModel.swift in Sources */,
