@@ -111,7 +111,7 @@ struct SessionView: View {
             RoundIconButton(systemImage: soundSymbol, label: "Sound: \(model.sessionSound.label). Click to change.") {
                 model.nextSessionSound()
             }
-            RoundIconButton(systemImage: "slider.horizontal.3", label: "Volume") { showVolume.toggle() }
+            RoundIconButton(systemImage: volumeSymbol, label: "Volume") { showVolume.toggle() }
                 .popover(isPresented: $showVolume, arrowEdge: .bottom) {
                     HStack(spacing: 10) {
                         Image(systemName: "speaker.fill")
@@ -128,11 +128,23 @@ struct SessionView: View {
         .padding(.horizontal, 16)
     }
 
+    /// Which sound is playing. Ambient is a wave rather than a speaker, so it isn't taken for
+    /// the volume button beside it.
     private var soundSymbol: String {
         switch model.sessionSound {
-        case .ambient: return "speaker.wave.2.fill"
+        case .ambient: return "waveform"
         case .bells: return "bell.fill"
         case .silent: return "speaker.slash.fill"
+        }
+    }
+
+    /// The volume button shows how loud it is, as the menu bar's speaker does.
+    private var volumeSymbol: String {
+        switch model.volume {
+        case ..<0.01: return "speaker.fill"
+        case ..<0.34: return "speaker.wave.1.fill"
+        case ..<0.67: return "speaker.wave.2.fill"
+        default: return "speaker.wave.3.fill"
         }
     }
 
