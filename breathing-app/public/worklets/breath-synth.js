@@ -6,12 +6,16 @@
  * so the web, Android and macOS apps sound the same. Nothing here is a recording: every
  * layer follows the same breath curve the picture uses.
  *
- *  - Pad: a low D drone (D2, D3, A3) under two upper notes from the D major pentatonic
- *    scale. The upper pair changes once per cycle with a slow crossfade and blooms as the
- *    lungs fill.
+ *  - Pad: a low D drone (D2, D3, A3) under F#4 and A4, the same chord every cycle, blooming
+ *    as the lungs fill.
  *  - Air: soft filtered noise that moves only while air moves: rising and brightening on
  *    the inhale, falling and darkening on the exhale, silent during holds.
  *  - Bells: soft-mallet tones exactly on each phase change, one pitch per side of the box.
+ *
+ * Every cycle sounds the same, so the breath can settle into it: every pitch and every slow
+ * beat between voices is a whole number of sixteenths of a hertz, so the pad comes round
+ * exactly once a cycle, and the air's noise is worked out from where in the cycle it is
+ * heard, so each breath's air is the same as the last.
  *
  * Loaded with audioWorklet.addModule(). Outside a worklet (tests) it just defines
  * globalThis.BreathSynth.
@@ -34,21 +38,16 @@ const START_FADE_FROM_ZERO = 0.03;
 const START_FADE_MIDWAY = 0.8;
 const FADE_OUT_SECONDS = 0.35;
 
-// Pad. D2 D3 A3 hold the ground; E4 F#4 A4 B4 colour it.
-const NOTES = [73.416, 146.832, 220.0, 329.628, 369.994, 440.0, 493.883];
+// Pad. D2 D3 A3 hold the ground; F#4 A4 colour it. Each pitch is within 0.05 Hz of equal
+// temperament and a whole number of sixteenths of a hertz, as are the slight detunings, so
+// every beat between voices comes round exactly once a 16 s cycle.
+const NOTES = [73.4375, 146.875, 220.0, 370.0, 440.0];
 const NOTE_COUNT = NOTES.length;
 const PEDAL_COUNT = 3;
-const BASE_GAIN = [0.12, 0.085, 0.06, 0.045, 0.045, 0.045, 0.045];
-const DETUNE = [0.05, 0.08, 0.09, 0.1, 0.1, 0.1, 0.1];
+const BASE_GAIN = [0.12, 0.085, 0.06, 0.045, 0.045];
+const DETUNE = [0.0625, 0.0625, 0.0625, 0.125, 0.125];
 const PEDAL_HARMONIC = [0.0, 0.22, 0.16];
 const SIDE = 0.28;
-const VOICINGS = [
-  [4, 5], // F#4 A4
-  [3, 6], // E4 B4
-  [4, 6], // F#4 B4
-  [3, 5], // E4 A4
-];
-const VOICING_FADE = 3.5;
 const PAD_FADE_IN = 4.5;
 const PAD_FADE_OUT = 6.5;
 
@@ -130,10 +129,20 @@ function xorshift(x) {
 
 const unit = (x) => (x >>> 8) / 16777216;
 
-/** Pink-ish noise with the rumble taken out. */
+/** White noise in -1..1, the same for the same k (a 32-bit integer hash). */
+function noise(k) {
+  let x = k | 0;
+  x ^= x >>> 16;
+  x = Math.imul(x, 0x7feb352d);
+  x ^= x >>> 15;
+  x = Math.imul(x, 0x846ca68b | 0);
+  x ^= x >>> 16;
+  return (x | 0) / 2147483648;
+}
+
+/** White noise made pink-ish with the rumble taken out. */
 class AirChannel {
-  constructor(seed, rate) {
-    this.state = seed === 0 ? 1 : seed | 0;
+  constructor(rate) {
     this.b0 = 0;
     this.b1 = 0;
     this.b2 = 0;
@@ -143,9 +152,7 @@ class AirChannel {
     this.hpA = rc / (rc + 1 / rate);
   }
 
-  next() {
-    this.state = xorshift(this.state);
-    const white = this.state / 2147483648;
+  next(white) {
     // Paul Kellet's economy pinking filter.
     this.b0 = 0.99765 * this.b0 + white * 0.099046;
     this.b1 = 0.963 * this.b1 + white * 0.2965164;
@@ -230,7 +237,6 @@ class BreathSynth {
     this.noteGainStep = new Float64Array(NOTE_COUNT);
     this.harm = new Float64Array(NOTE_COUNT);
     this.harmStep = new Float64Array(NOTE_COUNT);
-    this.upperWeight = new Float64Array(NOTE_COUNT);
     this.airGain = 0;
     this.airGainStep = 0;
     this.bellGain = 0;
@@ -259,9 +265,10 @@ class BreathSynth {
       this.incR[k] = (NOTES[k] + DETUNE[k]) * this.dt;
     }
 
-    this.airLeft = new AirChannel(seed ^ 0x1234567, rate);
-    this.airRight = new AirChannel(seed ^ 0x7654321, rate);
+    this.airLeft = new AirChannel(rate);
+    this.airRight = new AirChannel(rate);
     this.svf = new Svf();
+    this.cycleSamples = Math.round(CYCLE_SECONDS * rate);
 
     this.bellActive = new Uint8Array(MAX_BELLS);
     this.bellDelay = new Int32Array(MAX_BELLS);
@@ -356,11 +363,9 @@ class BreathSynth {
     const tb = t - SETTLE_SECONDS;
     let level = 0;
     let air = 0;
-    let cycle = -1;
     if (tb >= 0 && tb < this.breathingSeconds) {
       const index = Math.min(this.phaseCount - 1, Math.floor(tb / PHASE_SECONDS));
       const p = clamp((tb - index * PHASE_SECONDS) / PHASE_SECONDS, 0, 1);
-      cycle = Math.trunc(index / 4);
       switch (index % 4) {
         case 0:
           level = rise(p);
@@ -378,8 +383,6 @@ class BreathSynth {
         default:
           level = 0;
       }
-    } else if (tb >= this.breathingSeconds) {
-      cycle = this.cycles;
     }
 
     // Which layers the listener wants.
@@ -395,25 +398,8 @@ class BreathSynth {
     const volTarget = v * v;
     this.volMix = this.volMix < 0 ? volTarget : this.volMix + (volTarget - this.volMix) * this.volCoef;
 
-    // Pad: overall envelope, then which upper voicing is sounding.
+    // Pad.
     const padEnv = this.padEnvelope(t);
-    let voicingStart;
-    if (cycle < 0) voicingStart = 0;
-    else if (cycle >= this.cycles) voicingStart = this.endTime;
-    else voicingStart = SETTLE_SECONDS + cycle * 4 * PHASE_SECONDS;
-    const cur = this.voicingFor(cycle);
-    const prev = this.voicingFor(cycle - 1);
-    const x = clamp((t - voicingStart) / VOICING_FADE, 0, 1);
-    const w = this.upperWeight;
-    w.fill(0);
-    if (cur === prev) {
-      for (const k of VOICINGS[cur]) w[k] += 1;
-    } else {
-      const wCur = Math.sin(0.5 * Math.PI * x);
-      const wPrev = Math.cos(0.5 * Math.PI * x);
-      for (const k of VOICINGS[cur]) w[k] += wCur;
-      for (const k of VOICINGS[prev]) w[k] += wPrev;
-    }
     const pedalBloom = 0.86 + 0.14 * level;
     const upperBloom = 0.38 + 0.62 * level;
     const padScale = padEnv * this.padMix;
@@ -424,7 +410,7 @@ class BreathSynth {
         target = padScale * BASE_GAIN[k] * pedalBloom;
         harmTarget = PEDAL_HARMONIC[k] * (0.6 + 0.4 * level);
       } else {
-        target = padScale * BASE_GAIN[k] * upperBloom * w[k];
+        target = padScale * BASE_GAIN[k] * upperBloom;
         harmTarget = 0.05 + 0.15 * level;
       }
       this.noteGainStep[k] = (target - this.noteGain[k]) / CONTROL;
@@ -460,16 +446,13 @@ class BreathSynth {
     return 0;
   }
 
-  voicingFor(cycle) {
-    return cycle < 0 || cycle >= this.cycles ? 0 : cycle % VOICINGS.length;
-  }
-
   renderSamples(left, right, offset, count) {
     const tick = this.dt * this.speed;
     const { phC, phL, phR, incC, incL, incR, noteGain, noteGainStep, harm, harmStep } = this;
     const { bellActive, bellDelay, bellAge, bellAmp, bellPhase, bellInc, bellEnv, partialMult } = this;
     for (let i = 0; i < count; i++) {
-      while (this.clock >= this.nextCueTime) {
+      // Each cue starts on the sample nearest its time, so on the same sample of every cycle.
+      while (this.clock + tick / 2 >= this.nextCueTime) {
         if (this.clock - this.nextCueTime <= STALE_CUE) {
           this.startCue(this.cueKinds[this.nextCue]);
           if (this.onCue) this.onCue(this.cueKinds[this.nextCue], this.nextCueTime, this.clock);
@@ -496,9 +479,11 @@ class BreathSynth {
         harm[k] += harmStep[k];
       }
 
-      // Air.
-      const airL = this.svf.left(this.airLeft.next()) * this.airGain;
-      const airR = this.svf.right(this.airRight.next()) * this.airGain;
+      // Air: the same noise at the same place in every cycle.
+      const n = Math.round((this.clock - SETTLE_SECONDS) * this.rate) % this.cycleSamples;
+      const k = n < 0 ? n + this.cycleSamples : n;
+      const airL = this.svf.left(this.airLeft.next(noise(2 * k))) * this.airGain;
+      const airR = this.svf.right(this.airRight.next(noise(2 * k + 1))) * this.airGain;
       this.airGain += this.airGainStep;
 
       // Bells.

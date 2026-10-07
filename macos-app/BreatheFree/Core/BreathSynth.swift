@@ -23,13 +23,17 @@ enum SoundMode: String, CaseIterable {
 /// Nothing here is a recording. Every layer is computed from the same breath curve the
 /// picture uses, so a swell cannot land early or late and nothing is stretched to fit.
 ///
-/// - Pad: a low D drone (D2, D3, A3) under two upper notes from the D major pentatonic
-///   scale. The upper pair changes once per cycle with a slow crossfade and blooms as the
-///   lungs fill. It all sits below about 1 kHz, and no two voices beat faster than once
-///   every few seconds.
+/// - Pad: a low D drone (D2, D3, A3) under F#4 and A4, the same chord every cycle, blooming
+///   as the lungs fill. It all sits below about 1 kHz, and no two voices beat faster than
+///   once every few seconds.
 /// - Air: soft filtered noise that moves only while air moves: rising and brightening on
 ///   the inhale, falling and darkening on the exhale, silent during holds.
 /// - Bells: soft-mallet tones exactly on each phase change, one pitch per side of the box.
+///
+/// Every cycle sounds the same, so the breath can settle into it: every pitch and every slow
+/// beat between voices is a whole number of sixteenths of a hertz, so the pad comes round
+/// exactly once a cycle, and the air's noise is worked out from where in the cycle it is
+/// heard, so each breath's air is the same as the last.
 ///
 /// `render` runs only on the audio thread and never allocates or locks. `mode`, `volume`
 /// and `fadeOut()` may be used from any thread; they are read once per control step.
@@ -71,7 +75,6 @@ final class BreathSynth {
     private let noteGainStep: UnsafeMutablePointer<Double>
     private let harm: UnsafeMutablePointer<Double>
     private let harmStep: UnsafeMutablePointer<Double>
-    private let upperWeight: UnsafeMutablePointer<Double>
     private var airGain = 0.0
     private var airGainStep = 0.0
     private var bellGain = 0.0
@@ -101,6 +104,7 @@ final class BreathSynth {
     private var airLeft: AirChannel
     private var airRight: AirChannel
     private var svf = Svf()
+    private let cycleSamples: Int
 
     // Bells: a small pool of voices, each four decaying partials.
     private let bellActive: UnsafeMutablePointer<Bool>
@@ -138,7 +142,6 @@ final class BreathSynth {
         noteGainStep = doubles(n)
         harm = doubles(n)
         harmStep = doubles(n)
-        upperWeight = doubles(n)
         let dt = 1.0 / sampleRate
         phC = doubles(n)
         phL = doubles(n)
@@ -149,8 +152,9 @@ final class BreathSynth {
         mixCoef = 1 - exp(-Double(Self.control) * dt / 0.25)
         volCoef = 1 - exp(-Double(Self.control) * dt / 0.06)
 
-        airLeft = AirChannel(seed: seed ^ 0x1234567, sampleRate: sampleRate)
-        airRight = AirChannel(seed: seed ^ 0x7654321, sampleRate: sampleRate)
+        airLeft = AirChannel(sampleRate: sampleRate)
+        airRight = AirChannel(sampleRate: sampleRate)
+        cycleSamples = Int((SessionPlan.cycleSeconds * sampleRate).rounded())
 
         func ints(_ count: Int) -> UnsafeMutablePointer<Int> {
             let p = UnsafeMutablePointer<Int>.allocate(capacity: count)
@@ -198,7 +202,7 @@ final class BreathSynth {
     }
 
     deinit {
-        for p in [noteGain, noteGainStep, harm, harmStep, upperWeight, phC, phL, phR, incC, incL, incR,
+        for p in [noteGain, noteGainStep, harm, harmStep, phC, phL, phR, incC, incL, incR,
                   bellAmp, bellPhase, bellInc, bellEnv, partialMult, cueTimes] {
             p.deallocate()
         }
@@ -256,11 +260,9 @@ final class BreathSynth {
         let tb = t - SessionPlan.settleSeconds
         var level = 0.0
         var air = 0.0
-        var cycle = -1
         if tb >= 0 && tb < plan.breathingSeconds {
             let index = min(plan.phaseCount - 1, Int((tb / SessionPlan.phaseSeconds).rounded(.down)))
             let p = min(max((tb - Double(index) * SessionPlan.phaseSeconds) / SessionPlan.phaseSeconds, 0), 1)
-            cycle = index / 4
             switch index % 4 {
             case 0:
                 level = BreathCurve.rise(p)
@@ -275,8 +277,6 @@ final class BreathSynth {
             default:
                 level = 0
             }
-        } else if tb >= plan.breathingSeconds {
-            cycle = plan.cycles
         }
 
         // Which layers the listener wants.
@@ -291,29 +291,9 @@ final class BreathSynth {
         let volTarget = v * v
         volMix = volMix < 0 ? volTarget : volMix + (volTarget - volMix) * volCoef
 
-        // Pad: overall envelope, then which upper voicing is sounding.
+        // Pad.
         let padEnv = padEnvelope(t)
-        let voicingStart: Double
-        if cycle < 0 {
-            voicingStart = 0
-        } else if cycle >= plan.cycles {
-            voicingStart = plan.endTime
-        } else {
-            voicingStart = plan.phaseStart(cycle * 4)
-        }
-        let cur = voicing(for: cycle)
-        let prev = voicing(for: cycle - 1)
-        let x = min(max((t - voicingStart) / Self.voicingFade, 0), 1)
         let n = Self.notes.count
-        for k in 0..<n { upperWeight[k] = 0 }
-        if cur == prev {
-            for k in Self.voicings[cur] { upperWeight[k] += 1 }
-        } else {
-            let wCur = sin(0.5 * Double.pi * x)
-            let wPrev = cos(0.5 * Double.pi * x)
-            for k in Self.voicings[cur] { upperWeight[k] += wCur }
-            for k in Self.voicings[prev] { upperWeight[k] += wPrev }
-        }
         let pedalBloom = 0.86 + 0.14 * level
         let upperBloom = 0.38 + 0.62 * level
         let padScale = padEnv * padMix
@@ -325,7 +305,7 @@ final class BreathSynth {
                 target = padScale * Self.baseGain[k] * pedalBloom
                 harmTarget = Self.pedalHarmonic[k] * (0.6 + 0.4 * level)
             } else {
-                target = padScale * Self.baseGain[k] * upperBloom * upperWeight[k]
+                target = padScale * Self.baseGain[k] * upperBloom
                 harmTarget = 0.05 + 0.15 * level
             }
             noteGainStep[k] = (target - noteGain[k]) / blocks
@@ -359,10 +339,6 @@ final class BreathSynth {
         return 0
     }
 
-    private func voicing(for cycle: Int) -> Int {
-        cycle < 0 || cycle >= plan.cycles ? 0 : cycle % Self.voicings.count
-    }
-
     private func renderSamples(left: UnsafeMutablePointer<Float>, right: UnsafeMutablePointer<Float>, offset: Int, count: Int) {
         let tick = dt * rate
         let n = Self.notes.count
@@ -370,7 +346,7 @@ final class BreathSynth {
         let gainOut = Self.outputGain
         let partials = Self.partials
         for i in 0..<count {
-            while clock >= nextCueTime {
+            while clock + tick / 2 >= nextCueTime {
                 if clock - nextCueTime <= Self.staleCue {
                     startCue(cueKinds[nextCue])
                     onCue?(cueKinds[nextCue], nextCueTime, clock)
@@ -397,9 +373,11 @@ final class BreathSynth {
                 harm[k] += harmStep[k]
             }
 
-            // Air.
-            let airL = svf.left(airLeft.next()) * airGain
-            let airR = svf.right(airRight.next()) * airGain
+            // Air: the same noise at the same place in every cycle.
+            var k = Int(((clock - SessionPlan.settleSeconds) * sampleRate).rounded()) % cycleSamples
+            if k < 0 { k += cycleSamples }
+            let airL = svf.left(airLeft.next(Self.noise(2 * k))) * airGain
+            let airR = svf.right(airRight.next(Self.noise(2 * k + 1))) * airGain
             airGain += airGainStep
 
             // Bells.
@@ -491,9 +469,8 @@ final class BreathSynth {
         return a + (table[i + 1] - a) * f
     }
 
-    /// Pink-ish noise with the rumble taken out; filtered per ear by the shared `Svf` tuning.
+    /// White noise made pink-ish with the rumble taken out; filtered per ear by the shared `Svf` tuning.
     private struct AirChannel {
-        private var state: UInt32
         private var b0 = 0.0
         private var b1 = 0.0
         private var b2 = 0.0
@@ -501,15 +478,12 @@ final class BreathSynth {
         private var hpY = 0.0
         private let hpA: Double
 
-        init(seed: UInt32, sampleRate: Double) {
-            state = seed == 0 ? 1 : seed
+        init(sampleRate: Double) {
             let rc = 1 / (2 * Double.pi * BreathSynth.airHighpass)
             hpA = rc / (rc + 1 / sampleRate)
         }
 
-        mutating func next() -> Double {
-            state = BreathSynth.xorshift(state)
-            let white = Double(Int32(bitPattern: state)) / 2147483648.0
+        mutating func next(_ white: Double) -> Double {
             // Paul Kellet's economy pinking filter.
             b0 = 0.99765 * b0 + white * 0.0990460
             b1 = 0.96300 * b1 + white * 0.2965164
@@ -572,20 +546,15 @@ final class BreathSynth {
     private static let startFadeMidway = 0.8
     private static let fadeOutSeconds = 0.35
 
-    // Pad. D2 D3 A3 hold the ground; E4 F#4 A4 B4 colour it.
-    private static let notes: [Double] = [73.416, 146.832, 220.0, 329.628, 369.994, 440.0, 493.883]
+    // Pad. D2 D3 A3 hold the ground; F#4 A4 colour it. Each pitch is within 0.05 Hz of equal
+    // temperament and a whole number of sixteenths of a hertz, as are the slight detunings,
+    // so every beat between voices comes round exactly once a 16 s cycle.
+    private static let notes: [Double] = [73.4375, 146.875, 220.0, 370.0, 440.0]
     private static let pedalCount = 3
-    private static let baseGain: [Double] = [0.12, 0.085, 0.06, 0.045, 0.045, 0.045, 0.045]
-    private static let detune: [Double] = [0.05, 0.08, 0.09, 0.1, 0.1, 0.1, 0.1]
+    private static let baseGain: [Double] = [0.12, 0.085, 0.06, 0.045, 0.045]
+    private static let detune: [Double] = [0.0625, 0.0625, 0.0625, 0.125, 0.125]
     private static let pedalHarmonic: [Double] = [0.0, 0.22, 0.16]
     private static let side = 0.28
-    private static let voicings: [[Int]] = [
-        [4, 5], // F#4 A4
-        [3, 6], // E4 B4
-        [4, 6], // F#4 B4
-        [3, 5], // E4 A4
-    ]
-    private static let voicingFade = 3.5
     private static let padFadeIn = 4.5
     private static let padFadeOut = 6.5
 
@@ -641,7 +610,7 @@ final class BreathSynth {
         return x < 0 ? -y : y
     }
 
-    fileprivate static func xorshift(_ x0: UInt32) -> UInt32 {
+    private static func xorshift(_ x0: UInt32) -> UInt32 {
         var x = x0
         x ^= x << 13
         x ^= x >> 17
@@ -650,4 +619,15 @@ final class BreathSynth {
     }
 
     private static func unit(_ x: UInt32) -> Double { Double(x >> 8) / 16777216.0 }
+
+    /// White noise in -1...1, the same for the same `k` (a 32-bit integer hash).
+    private static func noise(_ k: Int) -> Double {
+        var x = UInt32(truncatingIfNeeded: k)
+        x ^= x >> 16
+        x &*= 0x7feb352d
+        x ^= x >> 15
+        x &*= 0x846ca68b
+        x ^= x >> 16
+        return Double(Int32(bitPattern: x)) / 2147483648.0
+    }
 }

@@ -57,13 +57,33 @@ final class BreathSynthTests: XCTestCase {
         var cues: [(Int, Double, Double)] = []
         _ = render(plan, mode: .bells, block: 333) { $0.onCue = { cues.append(($0, $1, $2)) } }
         XCTAssertEqual(cues.count, plan.phaseCount + 2)
+        // Each starts on the sample nearest its time, so on the same sample of every cycle.
         for (i, cue) in cues.enumerated() {
             let late = cue.2 - cue.1
-            XCTAssertTrue(late >= 0 && late < 1 / rate + 1e-9, "cue \(i) late by \(late)")
+            XCTAssertLessThanOrEqual(abs(late), 0.5 / rate + 1e-9, "cue \(i) off by \(late)")
         }
         for i in 0..<plan.phaseCount {
             XCTAssertEqual(cues[i + 1].0, i % 4)
             XCTAssertEqual(cues[i + 1].1, plan.phaseStart(i), accuracy: 1e-9)
+        }
+    }
+
+    func testEveryCycleSoundsTheSame() {
+        // After the first, every cycle is the same sound, sample for sample: the same chord,
+        // the same slow shimmer, the same air and bells. (The first has no bell tails from a
+        // cycle before it.)
+        let plan = SessionPlan(cycles: 5)
+        let cycle = Int(SessionPlan.cycleSeconds * rate)
+        let second = Int((SessionPlan.settleSeconds + SessionPlan.cycleSeconds) * rate)
+        for (solo, layer) in [(0, "pad"), (1, "air"), (2, "bells"), (-1, "all")] {
+            let out = render(plan, seconds: SessionPlan.settleSeconds + 4 * SessionPlan.cycleSeconds, solo: solo)
+            var worst = 0.0
+            for i in 0..<cycle {
+                worst = max(worst, abs(Double(out.left[second + i] - out.left[second + cycle + i])),
+                            abs(Double(out.right[second + i] - out.right[second + cycle + i])))
+            }
+            print("\(layer): largest difference between cycles 2 and 3 \(worst)")
+            XCTAssertLessThan(worst, 1e-5, "\(layer): cycles 2 and 3 differ")
         }
     }
 
