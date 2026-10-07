@@ -257,6 +257,27 @@ struct RoundIconButton: View {
     }
 }
 
+/// A see-through capsule with words on it, for an action a symbol alone leaves unclear.
+struct PillButton: View {
+    let title: String
+    let action: () -> Void
+    @Environment(\.ink) private var ink
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(ink.deep.color)
+                .padding(.horizontal, 16)
+                .frame(height: 40)
+                .background(Capsule().fill(ink.glass.color))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help(title)
+    }
+}
+
 /// "2:40"
 func clockText(_ seconds: Int) -> String {
     String(format: "%d:%02d", seconds / 60, seconds % 60)

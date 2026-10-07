@@ -89,6 +89,12 @@ struct Snapshots {
         }
         let (s, level) = session(at: 9.9)
         shoot("3-inhale-noon", noon, level: level, SessionView(model: model, session: s))
+        // Paused part way through a hold: the scene dims and the words give way to "Paused".
+        let now = CACurrentMediaTime()
+        let held = ActiveSession(plan: SessionPlan(cycles: 2), startTime: now - 13.6).paused(at: now)
+        let heldLevel = held.plan.frame(at: held.time(at: now)).level
+        shoot("4-hold-paused-noon", noon, level: heldLevel, SessionView(model: model, session: held))
+        shoot("4-hold-paused-night", night, level: heldLevel, SessionView(model: model, session: held))
         shoot("6-done-night", night, DoneView(model: model))
         shoot("6-done-noon", noon, DoneView(model: model))
     }
