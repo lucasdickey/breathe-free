@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import Balloon from './components/Balloon';
 import AudioControls from './components/AudioControls';
 import CloudBackground from './components/CloudBackground';
@@ -42,6 +42,8 @@ export default function Home() {
     start,
     stop,
     reset,
+    isPaused,
+    togglePause,
     volume,
     isMuted,
     toggleMute,
@@ -90,6 +92,20 @@ export default function Home() {
 
   const minutesRemaining = Math.floor(remainingSeconds / 60);
   const secondsRemaining = remainingSeconds % 60;
+
+  // The space bar pauses and resumes, unless it is typing in a field or pressing a control.
+  useEffect(() => {
+    if (phase === 'idle' || phase === 'completed') return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.code !== 'Space' && event.key !== ' ') return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, button, [contenteditable="true"], [role="slider"]')) return;
+      event.preventDefault();
+      togglePause();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [phase, togglePause]);
 
   const getPrompt = useCallback(
     (state: BreathingPhase) => prompts[state] || '',
@@ -215,26 +231,47 @@ export default function Home() {
               className="w-full flex flex-col items-center"
             >
               <div className="absolute top-4 right-4 flex flex-col items-end gap-2 z-20">
-                <div className="flex items-center bg-white/80 backdrop-blur-sm rounded-full px-4 py-2 shadow-md">
-                  <button
-                    onClick={stop}
-                    className="mr-3 text-gray-600 hover:text-gray-900"
-                    aria-label="Stop breathing exercise"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                  <span className="text-lg sm:text-xl font-semibold text-gray-800">
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-white/80 backdrop-blur-sm px-4 py-2 shadow-md text-lg sm:text-xl font-semibold tabular-nums text-gray-800">
                     {`${minutesRemaining.toString().padStart(2, '0')}:${secondsRemaining.toString().padStart(2, '0')}`}
                   </span>
+                  {/* Words rather than an ✕, which reads as closing a panel, not ending the session. */}
+                  <button
+                    type="button"
+                    onClick={stop}
+                    className="rounded-full bg-white/80 backdrop-blur-sm px-4 py-2 shadow-md text-sm sm:text-base font-semibold text-gray-700 transition-colors hover:bg-white hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+                  >
+                    End session
+                  </button>
                 </div>
-                <AudioControls
-                  volume={volume}
-                  isMuted={isMuted}
-                  onToggleMute={toggleMute}
-                  onVolumeChange={updateVolume}
-                />
+                <div className="flex items-center gap-2">
+                  {/* For when someone walks in: everything holds still until it is pressed again. */}
+                  <motion.button
+                    type="button"
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={togglePause}
+                    className="p-3 rounded-full bg-white/40 backdrop-blur-md hover:bg-white/60 transition-colors shadow-sm"
+                    aria-label={isPaused ? 'Resume session' : 'Pause session'}
+                    title={isPaused ? 'Resume (Space)' : 'Pause (Space)'}
+                  >
+                    {isPaused ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinejoin="round" strokeWidth={2} d="M8.5 5.5 18.5 12l-10 6.5z" />
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeWidth={2} d="M9 6v12M15 6v12" />
+                      </svg>
+                    )}
+                  </motion.button>
+                  <AudioControls
+                    volume={volume}
+                    isMuted={isMuted}
+                    onToggleMute={toggleMute}
+                    onVolumeChange={updateVolume}
+                  />
+                </div>
               </div>
               <div className="mt-8">
                 <Balloon
@@ -244,6 +281,7 @@ export default function Home() {
                   previousPrompt={getPrompt(previousPhase)}
                   level={level}
                   fade={fade}
+                  paused={isPaused}
                 />
               </div>
             </motion.div>
