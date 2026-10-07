@@ -48,6 +48,7 @@ final class SessionModel: ObservableObject {
     private var lastPhaseIndex = Int.min
 
     init() {
+        let defaults = UserDefaults.standard
         let saved = defaults.integer(forKey: Keys.cycles)
         cycles = SessionPlan.cycleChoices.contains(saved) ? saved : SessionPlan.defaultCycles
         soundMode = SoundMode(rawValue: defaults.string(forKey: Keys.sound) ?? "") ?? .ambient

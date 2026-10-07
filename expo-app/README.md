@@ -1,5 +1,9 @@
 # Breathe Free - Expo Mobile App
 
+> **Superseded by [`android-app`](../android-app/README.md)**, a native Android build with
+> working, clock-locked sound. This Expo version is kept for reference; its audio is
+> switched off.
+
 A guided breathing exercise app built with React Native and Expo, featuring haptic feedback for an enhanced mindfulness experience.
 
 ## Features
