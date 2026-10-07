@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The breathing orb inside the box, with the dot partway up the inhale side. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M40,32 H68 A8,8 0 0 1 76,40 V68 A8,8 0 0 1 68,76 H40 A8,8 0 0 1 32,68 V40 A8,8 0 0 1 40,32 Z"
+        android:strokeColor="#8CFFFFFF"
+        android:strokeWidth="2.2" />
+    <path
+        android:pathData="M34.3,73.7 A8,8 0 0 1 32,68 V46"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="2.6" />
+    <path android:pathData="M54,54 m-22,0 a22,22 0 1,0 44,0 a22,22 0 1,0 -44,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="54" android:centerY="54"
+                android:gradientRadius="22">
+                <item android:offset="0.55" android:color="#7086E3F4" />
+                <item android:offset="1" android:color="#0086E3F4" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M54,54 m-13,0 a13,13 0 1,0 26,0 a13,13 0 1,0 -26,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="50.4" android:centerY="49.8"
+                android:gradientRadius="19">
+                <item android:offset="0" android:color="#FFFFFFFF" />
+                <item android:offset="0.38" android:color="#FFB4F0F8" />
+                <item android:offset="1" android:color="#FF2FA6CF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M32,46 m-3.2,0 a3.2,3.2 0 1,0 6.4,0 a3.2,3.2 0 1,0 -6.4,0" />
+</vector>

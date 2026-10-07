@@ -1,0 +1,78 @@
+name: Build apps
+
+on:
+  push:
+    paths:
+      - "macos-app/**"
+      - "android-app/**"
+      - ".github/workflows/build-apps.yml"
+  pull_request:
+    paths:
+      - "macos-app/**"
+      - "android-app/**"
+      - ".github/workflows/build-apps.yml"
+  workflow_dispatch:
+
+jobs:
+  macos:
+    name: macOS app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test timing and sound code
+        run: swift test --package-path macos-app
+
+      - name: Build
+        run: |
+          xcodebuild -project macos-app/BreatheFree.xcodeproj -target BreatheFree -configuration Release \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= build
+
+      - name: Package
+        run: |
+          cd macos-app/build/Release
+          ditto -c -k --keepParent BreatheFree.app BreatheFree-macOS.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BreatheFree-macOS
+          path: macos-app/build/Release/BreatheFree-macOS.zip
+
+      - name: Render screens
+        continue-on-error: true
+        run: |
+          mkdir -p screens
+          swiftc -parse-as-library -o snapshots \
+            macos-app/BreatheFree/Core/*.swift macos-app/BreatheFree/Audio/*.swift \
+            macos-app/BreatheFree/Models/*.swift macos-app/BreatheFree/Views/*.swift \
+            macos-app/Snapshots/Snapshots.swift
+          ./snapshots screens
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BreatheFree-macOS-screens
+          path: screens
+          if-no-files-found: ignore
+
+  android:
+    name: Android app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install Android 37 platform
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0" > /dev/null
+
+      - name: Test and build
+        working-directory: android-app
+        run: ./gradlew --no-daemon testDebugUnitTest assembleRelease
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BreatheFree-android
+          path: android-app/app/build/outputs/apk/release/app-release.apk

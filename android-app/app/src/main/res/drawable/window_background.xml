@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The home screen's daytime sky, shown before the first frame is drawn. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient
+        android:angle="270"
+        android:startColor="#FF9FCFF2"
+        android:centerColor="#FFCBE6F8"
+        android:endColor="#FFEEF7FD"
+        android:type="linear" />
+</shape>
