@@ -2,6 +2,38 @@ import XCTest
 @testable import BreatheCore
 
 final class BreathTimelineTests: XCTestCase {
+    func testTheWordsFollowTheBox() {
+        let plan = SessionPlan(cycles: 2)
+        let seen = [0, 3, 8.1, 12.2, 16.05, 20, 24, 39.9, 40, 41].map { plan.prompt(at: $0) }
+        let expected = [("Settle in", ""), ("Settle in", ""), ("Breathe in", "Settle in"), ("Hold", "Breathe in"),
+                        ("Breathe out", "Hold"), ("Hold", "Breathe out"), ("Breathe in", "Hold"),
+                        ("Hold", "Breathe out"), ("", "Hold"), ("", "Hold")]
+        XCTAssertEqual(seen.map { $0.text }, expected.map { $0.0 })
+        XCTAssertEqual(seen.map { $0.previous }, expected.map { $0.1 })
+        XCTAssertEqual(plan.prompt(at: 12.2).since, 0.2, accuracy: 1e-9)
+    }
+
+    func testTheWordsCrossWithoutAFlash() {
+        // At every change, what was fully showing just before is what starts fading out, and
+        // the new words start from nothing: the screen goes straight from one to the other.
+        let plan = SessionPlan(cycles: 3)
+        for i in 0...plan.phaseCount {
+            let change = i < plan.phaseCount ? plan.phaseStart(i) : plan.endTime
+            let before = plan.prompt(at: change - 1e-6)
+            let after = plan.prompt(at: change)
+            XCTAssertEqual(before.fade, 1, accuracy: 1e-9)
+            XCTAssertEqual(after.previous, before.text)
+            XCTAssertEqual(after.fade, 0, accuracy: 1e-9)
+        }
+        var last = -1.0
+        for n in 0...40 {
+            let fade = Prompt(text: "Hold", previous: "Breathe in", since: Double(n) * 0.01).fade
+            XCTAssertGreaterThanOrEqual(fade, last)
+            last = fade
+        }
+        XCTAssertEqual(Prompt(text: "Hold", previous: "Breathe in", since: Prompt.fadeSeconds).fade, 1, accuracy: 1e-12)
+    }
+
     private let plan = SessionPlan(cycles: 2)
 
     func testSettleCountsDownFromEight() {

@@ -22,7 +22,7 @@ struct SessionView: View {
         GeometryReader { geo in
             let g = SceneGeometry.of(geo.size)
             TimelineView(.animation) { _ in
-                let t = session.time(at: CACurrentMediaTime() + Self.displayLead)
+                let t = session.time(at: MediaClock.now() + Self.displayLead)
                 let frame = session.plan.frame(at: t)
                 ZStack {
                     Canvas { context, _ in
@@ -39,12 +39,19 @@ struct SessionView: View {
                             .accessibilityHidden(true)
                     }
 
-                    let prompt = Self.prompt(for: frame)
-                    Text(prompt)
+                    // The words before fade out as the new ones fade in, each centred on its
+                    // own, both worked out from the session clock like everything else here.
+                    let words = session.plan.prompt(at: t)
+                    Text(words.previous)
                         .font(.system(size: 30, weight: .light))
                         .foregroundColor(ink.deep.color)
-                        .id(prompt)
-                        .transition(.opacity.animation(.easeInOut(duration: 0.35)))
+                        .opacity(1 - words.fade)
+                        .position(x: g.cx, y: g.cy + g.half + 58)
+                        .accessibilityHidden(true)
+                    Text(words.text)
+                        .font(.system(size: 30, weight: .light))
+                        .foregroundColor(ink.deep.color)
+                        .opacity(words.fade)
                         .position(x: g.cx, y: g.cy + g.half + 58)
                         .accessibilityAddTraits(.updatesFrequently)
 
@@ -112,13 +119,5 @@ struct SessionView: View {
             Capsule().fill(ink.line.color(0.7)).frame(width: 160 * min(max(done, 0), 1))
         }
         .frame(width: 160, height: 3)
-    }
-
-    static func prompt(for frame: BreathFrame) -> String {
-        switch frame.stage {
-        case .settle: return "Settle in"
-        case .breathing: return frame.phase?.prompt ?? ""
-        case .complete: return ""
-        }
     }
 }

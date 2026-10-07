@@ -62,6 +62,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -72,6 +73,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
@@ -84,7 +86,6 @@ import androidx.compose.ui.unit.sp
 import com.breathefree.app.ActiveSession
 import com.breathefree.app.BreatheController
 import com.breathefree.app.Screen
-import com.breathefree.app.core.BreathFrame
 import com.breathefree.app.core.SessionPlan
 import com.breathefree.app.core.SoundMode
 import com.breathefree.app.core.Stage
@@ -340,7 +341,11 @@ private fun SessionScreen(
     val plan = active.plan
     // Text only recomposes when what it shows changes, not on every frame.
     val frame = remember(active) { derivedStateOf { plan.frameAt(active.timeAt(frameNanos.value + leadNanos)) } }
-    val prompt by remember(active) { derivedStateOf { promptFor(frame.value) } }
+    // Which words are crossing changes only at a phase change; how far they have crossed is
+    // read where they are drawn.
+    val words by remember(active) {
+        derivedStateOf { plan.promptAt(active.timeAt(frameNanos.value + leadNanos)).let { it.text to it.previous } }
+    }
     val hint by remember(active) { derivedStateOf { if (frame.value.stage == Stage.SETTLE) "Soften your shoulders and jaw" else "" } }
     val count by remember(active) { derivedStateOf { frame.value.countdown } }
     val left by remember(active) { derivedStateOf { ceil(frame.value.remaining - 1e-9).toInt() } }
@@ -374,18 +379,26 @@ private fun SessionScreen(
             )
         }
 
-        Crossfade(
-            targetState = prompt,
-            animationSpec = tween(350),
-            modifier = Modifier.centerAt(g.cx, promptY),
-            label = "prompt",
-        ) { text ->
-            BasicText(
-                text,
-                Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                style = TextStyle(color = ink.deep, fontSize = 30.sp, fontWeight = FontWeight.Light, letterSpacing = 0.5.sp),
-            )
-        }
+        // The words before fade out as the new ones fade in, each centred on its own, both
+        // worked out from the session clock like everything else here.
+        val promptStyle = TextStyle(color = ink.deep, fontSize = 30.sp, fontWeight = FontWeight.Light, letterSpacing = 0.5.sp)
+        fun fade() = plan.promptAt(active.timeAt(frameNanos.value + leadNanos)).fade.toFloat()
+        BasicText(
+            words.second,
+            Modifier
+                .centerAt(g.cx, promptY)
+                .graphicsLayer { alpha = 1f - fade() }
+                .clearAndSetSemantics { },
+            style = promptStyle,
+        )
+        BasicText(
+            words.first,
+            Modifier
+                .centerAt(g.cx, promptY)
+                .graphicsLayer { alpha = fade() }
+                .semantics { liveRegion = LiveRegionMode.Polite },
+            style = promptStyle,
+        )
         if (hint.isNotEmpty()) {
             BasicText(
                 hint,
@@ -533,12 +546,6 @@ private fun Modifier.centerAt(x: Float, y: Float): Modifier = layout { measurabl
     layout(constraints.maxWidth, constraints.maxHeight) {
         p.place((x - p.width / 2f).roundToInt(), (y - p.height / 2f).roundToInt())
     }
-}
-
-private fun promptFor(f: BreathFrame): String = when (f.stage) {
-    Stage.SETTLE -> "Settle in"
-    Stage.BREATHING -> f.phase?.prompt ?: ""
-    Stage.COMPLETE -> ""
 }
 
 private fun clock(seconds: Int): String = "%d:%02d".format(seconds / 60, seconds % 60)

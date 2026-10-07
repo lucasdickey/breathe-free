@@ -1,0 +1,32 @@
+name: Promo footage
+
+# Renders the Mac app's frames for the promo videos (promo/README.md) from its own views.
+# Runs when the promo script or the renderer changes, or by hand.
+on:
+  push:
+    paths:
+      - "promo/script.json"
+      - "macos-app/Promo/**"
+      - ".github/workflows/promo.yml"
+  workflow_dispatch:
+
+jobs:
+  mac:
+    name: Mac promo frames
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Render
+        run: |
+          swiftc -parse-as-library -O -o render-promo \
+            macos-app/BreatheFree/Core/*.swift macos-app/BreatheFree/Audio/*.swift \
+            macos-app/BreatheFree/Models/*.swift macos-app/BreatheFree/Views/*.swift \
+            macos-app/Promo/Promo.swift
+          ./render-promo promo/script.json frames
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BreatheFree-macOS-promo-frames
+          path: frames
+          compression-level: 0

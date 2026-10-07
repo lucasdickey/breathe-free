@@ -81,13 +81,32 @@ class BreathSynthTest {
         assertEquals(plan.phaseCount + 2, cues.size)
         for ((i, cue) in cues.withIndex()) {
             val (_, scheduled, actual) = cue
+            // Each starts on the sample nearest its time, so on the same sample of every cycle.
             val late = actual - scheduled
-            assertTrue("cue $i late by $late s", late >= 0.0 && late < 1.0 / rate + 1e-9)
+            assertTrue("cue $i off by $late s", abs(late) <= 0.5 / rate + 1e-9)
         }
         for (i in 0 until plan.phaseCount) {
             assertEquals(i % 4, cues[i + 1].first)
             assertEquals(plan.phaseStart(i), cues[i + 1].second, 1e-9)
         }
+    }
+
+    @Test
+    fun everyCycleSoundsTheSame() {
+        // After the first, every cycle is the same sound, sample for sample: the same chord,
+        // the same slow shimmer, the same air and bells. (The first has no bell tails from a
+        // cycle before it.)
+        val plan = SessionPlan(5)
+        val cycle = (SessionPlan.CYCLE_SECONDS * rate).toInt() * 2
+        val second = ((SessionPlan.SETTLE_SECONDS + SessionPlan.CYCLE_SECONDS) * rate).toInt() * 2
+        val worst = listOf(0 to "pad", 1 to "air", 2 to "bells", -1 to "all").associate { (solo, layer) ->
+            val out = render(plan, seconds = SessionPlan.SETTLE_SECONDS + 4 * SessionPlan.CYCLE_SECONDS, solo = solo)
+            var d = 0.0
+            for (i in 0 until cycle) d = max(d, abs(out[second + i].toDouble() - out[second + cycle + i]))
+            println("$layer: largest difference between cycles 2 and 3 %.7f".format(d))
+            layer to d
+        }
+        for ((layer, d) in worst) assertTrue("$layer: cycles 2 and 3 differ by up to $d", d < 1e-5)
     }
 
     @Test

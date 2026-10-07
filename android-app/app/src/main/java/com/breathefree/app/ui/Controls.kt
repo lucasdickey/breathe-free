@@ -2,6 +2,7 @@ package com.breathefree.app.ui
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -32,14 +33,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -53,15 +58,16 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Colours for everything drawn on the sky: [OnLight] for the daytime sky, [OnDark] from dusk to
@@ -207,10 +213,10 @@ fun OutlineButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
 }
 
 /**
- * Session length as one circle showing the current count. Tapping it fans the other counts
- * out to its left and right, nearest first; tapping one picks it, and they fold back into it.
- * The caller folds it too on a touch anywhere else, for which [onBounds] reports where the row
- * of circles is, and on Back.
+ * Session length as one drop showing the current count. Tapping it opens the row: the other
+ * counts bud out of it as liquid and pull free to its left and right, nearest first; tapping
+ * one picks it, and they all flow back into it (LiquidPicker.kt). The caller folds the row too
+ * on a touch anywhere else, for which [onBounds] reports where the row is, and on Back.
  */
 @Composable
 fun CyclePicker(
@@ -223,35 +229,53 @@ fun CyclePicker(
     onBounds: (LayoutCoordinates) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val ink = LocalInk.current
     val chosen = choices.indexOf(selected).coerceAtLeast(0)
-    // How far each circle has come out from the current one: 0 folded, 1 in its place.
-    val spread = remember(choices) { choices.map { Animatable(0f) } }
+    // How far each drop has come out of the chosen one: 0 at home inside it, 1 in its place.
+    val spread = remember(choices) { choices.map { Animatable(if (open) 1f else 0f) } }
+    // How much of the chosen colour each drop wears.
+    val accent = remember(choices) { choices.indices.map { Animatable(if (it == chosen) 1f else 0f) } }
     LaunchedEffect(open, chosen) {
         for (i in choices.indices) {
             launch {
                 if (open) {
-                    delay(FAN_STAGGER_MS * abs(i - chosen))
-                    spread[i].animateTo(1f, spring(dampingRatio = 0.68f, stiffness = 420f))
+                    delay(LiquidMotion.STAGGER_MS * abs(i - chosen))
+                    spread[i].animateTo(
+                        1f,
+                        spring(dampingRatio = LiquidMotion.OPEN_DAMPING, stiffness = LiquidMotion.OPEN_STIFFNESS),
+                    )
                 } else {
-                    spread[i].animateTo(0f, spring(dampingRatio = 1f, stiffness = 700f))
+                    spread[i].animateTo(0f, spring(dampingRatio = 1f, stiffness = LiquidMotion.CLOSE_STIFFNESS))
                 }
             }
+            launch { accent[i].animateTo(if (i == chosen) 1f else 0f, tween(LiquidMotion.RECOLOUR_MS)) }
         }
     }
     BoxWithConstraints(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         val gap = 8.dp
         val size = min(48.dp, (maxWidth - gap * (choices.size - 1)) / choices.size)
         val step = size + gap
+
+        // The drops as they are this frame, read where they are drawn, so the motion redraws
+        // the row without composing it again.
+        fun Density.drops() = LiquidMotion.drops(
+            FloatArray(choices.size) { spread[it].value },
+            FloatArray(choices.size) { spread[it].velocity },
+            FloatArray(choices.size) { accent[it].value },
+            chosen,
+            open,
+            size.toPx(),
+            step.toPx(),
+        )
         Box(
             Modifier
                 .width(size * choices.size + gap * (choices.size - 1))
                 .height(size)
-                .onGloballyPositioned(onBounds),
+                .onGloballyPositioned(onBounds)
+                .drawBehind { drawLiquid(drops(), chosen, ink, settled = (spread + accent).none { it.isRunning }) },
             contentAlignment = Alignment.Center,
         ) {
-            // The others are drawn first, so the current count stays on top as they come out
-            // from behind it.
-            for (i in choices.indices.sortedBy { it == chosen }) {
+            for (i in choices.indices) {
                 key(choices[i]) {
                     val current = i == chosen
                     val slot = step * (i - (choices.size - 1) / 2f)
@@ -268,50 +292,63 @@ fun CyclePicker(
                             .semantics { contentDescription = "Session length: ${describe(choices[i])}. Tap to change." }
                         else -> Modifier.clearAndSetSemantics { }
                     }
-                    CountCircle(
-                        text = choices[i].toString(),
-                        selected = current,
-                        size = size,
-                        modifier = Modifier
+                    Box(
+                        Modifier
                             .offset { IntOffset((slot.toPx() * spread[i].value).roundToInt(), 0) }
-                            .graphicsLayer {
-                                if (!current) {
-                                    val s = spread[i].value
-                                    alpha = s.coerceIn(0f, 1f)
-                                    scaleX = 0.55f + 0.45f * s
-                                    scaleY = 0.55f + 0.45f * s
-                                }
-                            }
+                            .size(size)
                             .then(touch),
-                    )
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        BasicText(
+                            choices[i].toString(),
+                            modifier = Modifier.graphicsLayer { alpha = drops()[i].label },
+                            style = TextStyle(
+                                fontSize = 17.sp,
+                                fontWeight = if (current) FontWeight.SemiBold else FontWeight.Normal,
+                                textAlign = TextAlign.Center,
+                            ),
+                            color = { lerp(ink.deep, ink.onAccent, accent[i].value) },
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-private const val FAN_STAGGER_MS = 28L
-
-@Composable
-private fun CountCircle(text: String, selected: Boolean, size: Dp, modifier: Modifier) {
-    val ink = LocalInk.current
-    Box(
-        modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(if (selected) ink.accent else ink.field)
-            .border(1.dp, if (selected) ink.accent else ink.fieldBorder, CircleShape),
-        contentAlignment = Alignment.Center,
-    ) {
-        BasicText(
-            text,
-            style = TextStyle(
-                color = if (selected) ink.onAccent else ink.deep,
-                fontSize = 17.sp,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                textAlign = TextAlign.Center,
-            ),
-        )
+/**
+ * The drops: all of them as one shape of liquid in the unchosen colours, run together wherever
+ * they meet, with a rim inside its edge like a border, and the chosen one solid on top.
+ */
+private fun DrawScope.drawLiquid(drops: List<PickerDrop>, chosen: Int, ink: Ink, settled: Boolean) {
+    val rim = 1.dp.toPx()
+    translate(center.x, center.y) {
+        if (settled) {
+            // At rest the drops are plain circles, with no need to trace them.
+            for (d in drops) {
+                if (d.radius <= 0.05f) continue
+                drawCircle(ink.field, d.radius, Offset(d.x, 0f))
+                drawCircle(ink.fieldBorder, d.radius - rim / 2, Offset(d.x, 0f), style = Stroke(rim))
+            }
+        } else {
+            val outline = Path().apply { fillType = PathFillType.EvenOdd }
+            val row = LiquidMotion.order(drops.size, chosen).map { drops[it].liquid }
+            for (loop in LiquidOutline.loops(row, inset = rim / 2, cell = 2.dp.toPx())) {
+                outline.moveTo(loop[0], loop[1])
+                for (n in 2 until loop.size step 2) outline.lineTo(loop[n], loop[n + 1])
+                outline.close()
+            }
+            drawPath(outline, ink.field)
+            drawPath(outline, ink.fieldBorder, style = Stroke(rim))
+        }
+        for (d in drops) {
+            if (d.accent <= 0f || d.radius <= 0.05f) continue
+            drawOval(
+                ink.accent.copy(alpha = ink.accent.alpha * d.accent),
+                topLeft = Offset(d.x - d.radius * d.stretch, -d.radius / d.stretch),
+                size = Size(2 * d.radius * d.stretch, 2 * d.radius / d.stretch),
+            )
+        }
     }
 }
 

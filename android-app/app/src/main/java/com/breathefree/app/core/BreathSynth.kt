@@ -23,13 +23,17 @@ enum class SoundMode(val label: String) {
  * Nothing here is a recording. Every layer is computed from the same breath curve the
  * picture uses, so a swell cannot land early or late and nothing is stretched to fit.
  *
- *  - Pad: a low D drone (D2, D3, A3) under two upper notes from the D major pentatonic
- *    scale. The upper pair changes once per cycle with a slow crossfade and blooms as the
- *    lungs fill. It all sits below about 1 kHz, and no two voices beat faster than once
- *    every few seconds.
+ *  - Pad: a low D drone (D2, D3, A3) under F#4 and A4, the same chord every cycle, blooming
+ *    as the lungs fill. It all sits below about 1 kHz, and no two voices beat faster than
+ *    once every few seconds.
  *  - Air: soft filtered noise that moves only while air moves: rising and brightening on
  *    the inhale, falling and darkening on the exhale, silent during holds.
  *  - Bells: soft-mallet tones exactly on each phase change, one pitch per side of the box.
+ *
+ * Every cycle sounds the same, so the breath can settle into it: every pitch and every slow
+ * beat between voices is a whole number of sixteenths of a hertz, so the pad comes round
+ * exactly once a cycle, and the air's noise is worked out from where in the cycle it is
+ * heard, so each breath's air is the same as the last.
  *
  * [render] runs only on the audio thread. [mode], [volume] and [fadeOut] may be used from
  * any thread; they are read once per control step.
@@ -95,7 +99,6 @@ class BreathSynth(
     private var fadeOutGain = 1.0
     private var startGain = 0.0
     private var airCutoff = 400.0
-    private val upperWeight = DoubleArray(NOTE_COUNT)
 
     private val mixCoef = 1.0 - exp(-CONTROL * dt / 0.25)
     private val volCoef = 1.0 - exp(-CONTROL * dt / 0.06)
@@ -110,9 +113,10 @@ class BreathSynth(
     private val incR = DoubleArray(NOTE_COUNT) { (NOTES[it] + DETUNE[it]) * dt }
 
     // ---- Air: one independent noise channel per ear, so it feels wide rather than centred.
-    private val airLeft = AirChannel(seed xor 0x1234567, sampleRate)
-    private val airRight = AirChannel(seed xor 0x7654321, sampleRate)
+    private val airLeft = AirChannel(sampleRate)
+    private val airRight = AirChannel(sampleRate)
     private val svf = Svf()
+    private val cycleSamples = Math.round(SessionPlan.CYCLE_SECONDS * sampleRate)
 
     // ---- Bells: a small pool of voices, each four decaying partials.
     private val bellActive = BooleanArray(MAX_BELLS)
@@ -206,11 +210,9 @@ class BreathSynth(
         val tb = t - SessionPlan.SETTLE_SECONDS
         var level = 0.0
         var air = 0.0
-        var cycle = -1
         if (tb >= 0.0 && tb < plan.breathingSeconds) {
             val index = min(plan.phaseCount - 1, floor(tb / SessionPlan.PHASE_SECONDS).toInt())
             val p = ((tb - index * SessionPlan.PHASE_SECONDS) / SessionPlan.PHASE_SECONDS).coerceIn(0.0, 1.0)
-            cycle = index / 4
             when (index % 4) {
                 0 -> {
                     level = BreathCurve.rise(p)
@@ -225,8 +227,6 @@ class BreathSynth(
                 }
                 else -> level = 0.0
             }
-        } else if (tb >= plan.breathingSeconds) {
-            cycle = plan.cycles
         }
 
         // Which layers the listener wants.
@@ -241,25 +241,8 @@ class BreathSynth(
         val volTarget = v * v
         volMix = if (volMix < 0.0) volTarget else volMix + (volTarget - volMix) * volCoef
 
-        // Pad: overall envelope, then which upper voicing is sounding.
+        // Pad.
         val padEnv = padEnvelope(t)
-        val voicingStart = when {
-            cycle < 0 -> 0.0
-            cycle >= plan.cycles -> plan.endTime
-            else -> plan.phaseStart(cycle * 4)
-        }
-        val cur = voicingFor(cycle)
-        val prev = voicingFor(cycle - 1)
-        val x = ((t - voicingStart) / VOICING_FADE).coerceIn(0.0, 1.0)
-        upperWeight.fill(0.0)
-        if (cur == prev) {
-            for (k in VOICINGS[cur]) upperWeight[k] += 1.0
-        } else {
-            val wCur = sin(0.5 * PI * x)
-            val wPrev = cos(0.5 * PI * x)
-            for (k in VOICINGS[cur]) upperWeight[k] += wCur
-            for (k in VOICINGS[prev]) upperWeight[k] += wPrev
-        }
         val pedalBloom = 0.86 + 0.14 * level
         val upperBloom = 0.38 + 0.62 * level
         val padScale = padEnv * padMix
@@ -270,7 +253,7 @@ class BreathSynth(
                 target = padScale * BASE_GAIN[k] * pedalBloom
                 harmTarget = PEDAL_HARMONIC[k] * (0.6 + 0.4 * level)
             } else {
-                target = padScale * BASE_GAIN[k] * upperBloom * upperWeight[k]
+                target = padScale * BASE_GAIN[k] * upperBloom
                 harmTarget = 0.05 + 0.15 * level
             }
             noteGainStep[k] = (target - noteGain[k]) / CONTROL
@@ -307,13 +290,10 @@ class BreathSynth(
         }
     }
 
-    private fun voicingFor(cycle: Int): Int =
-        if (cycle < 0 || cycle >= plan.cycles) 0 else cycle % VOICINGS.size
-
     private fun renderSamples(out: FloatArray, offset: Int, count: Int) {
         val tick = dt * rate
         for (i in 0 until count) {
-            while (clock >= nextCueTime) {
+            while (clock + tick / 2 >= nextCueTime) {
                 if (clock - nextCueTime <= STALE_CUE) {
                     startCue(cueKinds[nextCue])
                     onCue?.invoke(cueKinds[nextCue], nextCueTime, clock)
@@ -340,9 +320,11 @@ class BreathSynth(
                 harm[k] += harmStep[k]
             }
 
-            // Air.
-            val airL = svf.left(airLeft.next()) * airGain
-            val airR = svf.right(airRight.next()) * airGain
+            // Air: the same noise at the same place in every cycle.
+            val n = Math.round((clock - SessionPlan.SETTLE_SECONDS) * sampleRate) % cycleSamples
+            val k = (if (n < 0) n + cycleSamples else n).toInt()
+            val airL = svf.left(airLeft.next(noise(2 * k))) * airGain
+            val airR = svf.right(airRight.next(noise(2 * k + 1))) * airGain
             airGain += airGainStep
 
             // Bells.
@@ -421,9 +403,8 @@ class BreathSynth(
         }
     }
 
-    /** Pink-ish noise with the rumble taken out; filtered per ear by the shared [Svf] tuning. */
-    private class AirChannel(seed: Int, sampleRate: Int) {
-        private var state = if (seed == 0) 1 else seed
+    /** White noise made pink-ish with the rumble taken out; filtered per ear by the shared [Svf] tuning. */
+    private class AirChannel(sampleRate: Int) {
         private var b0 = 0.0
         private var b1 = 0.0
         private var b2 = 0.0
@@ -436,9 +417,7 @@ class BreathSynth(
             hpA = rc / (rc + 1.0 / sampleRate)
         }
 
-        fun next(): Double {
-            state = xorshift(state)
-            val white = state / 2147483648.0
+        fun next(white: Double): Double {
             // Paul Kellet's economy pinking filter.
             b0 = 0.99765 * b0 + white * 0.0990460
             b1 = 0.96300 * b1 + white * 0.2965164
@@ -500,21 +479,16 @@ class BreathSynth(
         private const val START_FADE_MIDWAY = 0.8
         private const val FADE_OUT_SECONDS = 0.35
 
-        // Pad. D2 D3 A3 hold the ground; E4 F#4 A4 B4 colour it.
-        private val NOTES = doubleArrayOf(73.416, 146.832, 220.0, 329.628, 369.994, 440.0, 493.883)
+        // Pad. D2 D3 A3 hold the ground; F#4 A4 colour it. Each pitch is within 0.05 Hz of
+        // equal temperament and a whole number of sixteenths of a hertz, as are the slight
+        // detunings, so every beat between voices comes round exactly once a 16 s cycle.
+        private val NOTES = doubleArrayOf(73.4375, 146.875, 220.0, 370.0, 440.0)
         private val NOTE_COUNT = NOTES.size
         private const val PEDAL_COUNT = 3
-        private val BASE_GAIN = doubleArrayOf(0.12, 0.085, 0.06, 0.045, 0.045, 0.045, 0.045)
-        private val DETUNE = doubleArrayOf(0.05, 0.08, 0.09, 0.1, 0.1, 0.1, 0.1)
+        private val BASE_GAIN = doubleArrayOf(0.12, 0.085, 0.06, 0.045, 0.045)
+        private val DETUNE = doubleArrayOf(0.0625, 0.0625, 0.0625, 0.125, 0.125)
         private val PEDAL_HARMONIC = doubleArrayOf(0.0, 0.22, 0.16)
         private const val SIDE = 0.28
-        private val VOICINGS = arrayOf(
-            intArrayOf(4, 5), // F#4 A4
-            intArrayOf(3, 6), // E4 B4
-            intArrayOf(4, 6), // F#4 B4
-            intArrayOf(3, 5), // E4 A4
-        )
-        private const val VOICING_FADE = 3.5
         private const val PAD_FADE_IN = 4.5
         private const val PAD_FADE_OUT = 6.5
 
@@ -584,5 +558,16 @@ class BreathSynth(
         }
 
         private fun unit(x: Int): Double = (x ushr 8) / 16777216.0
+
+        /** White noise in -1..1, the same for the same [k] (a 32-bit integer hash). */
+        private fun noise(k: Int): Double {
+            var x = k
+            x = x xor (x ushr 16)
+            x *= 0x7feb352d
+            x = x xor (x ushr 15)
+            x *= 0x846ca68b.toInt()
+            x = x xor (x ushr 16)
+            return x / 2147483648.0
+        }
     }
 }
