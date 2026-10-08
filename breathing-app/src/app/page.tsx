@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
+import Image from 'next/image';
 import Balloon from './components/Balloon';
 import AudioControls from './components/AudioControls';
 import CloudBackground from './components/CloudBackground';
@@ -125,20 +126,23 @@ export default function Home() {
               exit={{ opacity: 0, y: -20 }}
               className="w-full flex flex-col items-center"
             >
-              <div className="mb-8 flex justify-center">
-                <motion.svg
-                  width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"
-                  animate={{ scale: [1, 1.1, 1] }}
+              <div className="mb-6 flex justify-center">
+                <motion.div
+                  animate={{ scale: [1, 1.04, 1] }}
                   transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
                 >
-                  <circle cx="32" cy="32" r="8" stroke="#8B9DC3" strokeWidth="1.5" opacity="0.9" />
-                  <circle cx="32" cy="32" r="16" stroke="#8B9DC3" strokeWidth="1.2" opacity="0.6" />
-                  <circle cx="32" cy="32" r="24" stroke="#8B9DC3" strokeWidth="1" opacity="0.4" />
-                  <circle cx="32" cy="32" r="30" stroke="#8B9DC3" strokeWidth="0.8" opacity="0.2" />
-                </motion.svg>
+                  {/* The app icon, the same file as the favicon. */}
+                  <Image
+                    src="/favicon.svg"
+                    alt=""
+                    width={80}
+                    height={80}
+                    className="drop-shadow-[0_8px_16px_rgba(23,66,107,0.3)]"
+                  />
+                </motion.div>
               </div>
               <h1 className="mb-3 text-4xl font-medium text-gray-800 text-center tracking-wide">
-                Breathe
+                Breathe Free
               </h1>
               <p className="mb-8 text-lg text-gray-600 text-center">
                 Find your calm through guided breathing

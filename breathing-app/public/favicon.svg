@@ -1,3 +1,36 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <circle cx="16" cy="16" r="16" fill="#06b6d4"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72">
+  <!-- The Breathe Free app icon: the breathing orb inside the box, with the dot partway up the inhale side. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0B1F3D"/>
+      <stop offset=".55" stop-color="#17426B"/>
+      <stop offset="1" stop-color="#2C7593"/>
+    </linearGradient>
+    <radialGradient id="cloud">
+      <stop offset="0" stop-color="#fff" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="halo" cx="36" cy="36" r="22.8" gradientUnits="userSpaceOnUse">
+      <stop offset=".57" stop-color="#86E3F4" stop-opacity=".48"/>
+      <stop offset="1" stop-color="#86E3F4" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="orb" cx="32.4" cy="31.8" r="19" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset=".38" stop-color="#B4F0F8"/>
+      <stop offset="1" stop-color="#2FA6CF"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="14" cy="28" r="5.6" gradientUnits="userSpaceOnUse">
+      <stop offset=".39" stop-color="#fff" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="72" height="72" rx="16.2" fill="url(#sky)"/>
+  <ellipse cx="13.6" cy="9.9" rx="12.2" ry="4.4" fill="url(#cloud)"/>
+  <ellipse cx="58.4" cy="64.7" rx="16.6" ry="4.8" fill="url(#cloud)"/>
+  <rect x="14" y="14" width="44" height="44" rx="8" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="1.4"/>
+  <path d="M16.3,55.7 A8,8 0 0 1 14,50 V28" fill="none" stroke="#fff" stroke-linecap="round" stroke-width="1.75"/>
+  <circle cx="36" cy="36" r="22.8" fill="url(#halo)"/>
+  <circle cx="36" cy="36" r="13" fill="url(#orb)"/>
+  <circle cx="14" cy="28" r="5.6" fill="url(#glow)"/>
+  <circle cx="14" cy="28" r="2.2" fill="#fff"/>
 </svg>
