@@ -65,8 +65,9 @@ class OrbColors(
 
 fun DrawScope.drawOrb(center: Offset, radius: Float, level: Float, colors: OrbColors, alpha: Float = 1f) {
     if (alpha <= 0f || radius <= 0f) return
-    // Halo: strongest at the rim, gone by about twice the radius; fuller breath, wider glow.
-    val haloRadius = radius * (1.9f + 0.35f * level)
+    // Halo: strongest at the rim, then fading over much the same width at every breath, so it
+    // stays close to the orb and leaves the clouds beyond the box alone.
+    val haloRadius = radius * (1.9f - 0.45f * level)
     val haloAlpha = (0.26f + 0.22f * level) * alpha
     val rim = (radius / haloRadius) * 0.92f
     drawCircle(

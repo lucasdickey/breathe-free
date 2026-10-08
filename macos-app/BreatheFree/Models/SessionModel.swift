@@ -12,15 +12,6 @@ enum Screen {
     case home, session, done
 }
 
-/// A session in progress: its plan and the host time (CACurrentMediaTime) at which its
-/// time is zero.
-struct ActiveSession: Equatable {
-    let plan: SessionPlan
-    let startTime: CFTimeInterval
-
-    func time(at host: CFTimeInterval) -> Double { host - startTime }
-}
-
 final class SessionModel: ObservableObject {
     @Published var cycles: Int {
         didSet { defaults.set(cycles, forKey: Keys.cycles) }
@@ -67,7 +58,30 @@ final class SessionModel: ObservableObject {
         startTicker()
     }
 
-    /// The sound button during a session: ambient → bells only → silent → ambient.
+    var isPaused: Bool { session?.isPaused ?? false }
+
+    /// Hold the session still where it is: the picture stops and the sound fades out.
+    func pause() {
+        guard let active = session, !active.isPaused, screen == .session else { return }
+        session = active.paused(at: CACurrentMediaTime())
+        stopAudio()
+    }
+
+    /// Carry on from the moment it was paused; the sound fades back in on the beat.
+    func resume() {
+        guard let active = session, active.isPaused else { return }
+        let resumed = active.resumed(at: CACurrentMediaTime())
+        session = resumed
+        startAudio(for: resumed, mode: sessionSound)
+    }
+
+    /// The pause button and the space bar.
+    func togglePause() {
+        if isPaused { resume() } else { pause() }
+    }
+
+    /// The sound button during a session: ambient → bells only → silent → ambient. While
+    /// paused it only changes the choice; the sound starts in that mode on resume.
     func nextSessionSound() {
         guard let active = session else { return }
         let next: SoundMode
@@ -81,7 +95,7 @@ final class SessionModel: ObservableObject {
             stopAudio()
         } else if let audio {
             audio.mode = next
-        } else {
+        } else if !active.isPaused {
             startAudio(for: active, mode: next)
         }
     }

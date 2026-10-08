@@ -5,8 +5,8 @@ out for four, hold for four, with an eight-second settle at the start. It replac
 Expo build in `../expo-app`, whose audio was switched off.
 
 The design matches the macOS app: the dot on the box rises and falls with the breath,
-the orb grows and shrinks on the same curve, the sky follows the time of day and
-brightens a little as you fill up, and
+the orb grows and shrinks on the same curve, the sky follows the time of day while its
+clouds drift on without a break, and
 the sound (a drone that blooms on the inhale, soft moving air, a bell on every change)
 is generated as it plays. See `../macos-app/README.md` for the full description.
 

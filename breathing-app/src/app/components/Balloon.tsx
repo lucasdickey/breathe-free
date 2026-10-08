@@ -12,9 +12,11 @@ type BalloonProps = {
   level: MotionValue<number>;
   /** How far the words have crossed from `previousPrompt` to `prompt`, 0..1, from the session clock. */
   fade: MotionValue<number>;
+  /** Held still: the words give way to "Paused" and the balloon dims a little. */
+  paused?: boolean;
 };
 
-const Balloon = ({ breathingState, countdown, prompt, previousPrompt, level, fade }: BalloonProps) => {
+const Balloon = ({ breathingState, countdown, prompt, previousPrompt, level, fade, paused = false }: BalloonProps) => {
   const balloonVariants = {
     idle: { backgroundColor: '#ffffff' },
     'pre-start': { backgroundColor: '#06b6d4' },
@@ -36,38 +38,51 @@ const Balloon = ({ breathingState, countdown, prompt, previousPrompt, level, fad
       variants={balloonVariants}
       animate={breathingState}
       transition={{ backgroundColor: { duration: 0.5 } }}
-      style={{ scale }}
-      className="relative flex h-64 w-64 items-center justify-center rounded-full shadow-2xl sm:h-64 sm:w-64"
+      style={{ scale, opacity: paused ? 0.8 : 1 }}
+      className="relative flex h-64 w-64 items-center justify-center rounded-full shadow-2xl transition-opacity duration-300 sm:h-64 sm:w-64"
     >
       <div className="absolute flex flex-col items-center justify-center text-center px-4">
-        {/* The words before fade out as the new ones fade in, both in the same place and both
-            following the session clock, so nothing moves between them. */}
-        <div className="grid place-items-center">
-          <motion.span
-            aria-hidden
-            style={{ opacity: fadingOut, gridArea: '1 / 1' }}
-            className={`text-2xl font-bold ${textColour} text-center`}
-          >
-            {previousPrompt}
-          </motion.span>
-          <motion.span
-            aria-live="polite"
-            style={{ opacity: fade, gridArea: '1 / 1' }}
-            className={`text-2xl font-bold ${textColour} text-center`}
-          >
-            {prompt}
-          </motion.span>
-        </div>
+        {paused ? (
+          <>
+            <span aria-live="polite" className={`text-2xl font-bold ${textColour} text-center`}>
+              Paused
+            </span>
+            <span className={`mt-2 text-sm font-medium ${textColour} text-center opacity-90`}>
+              Tap play to carry on
+            </span>
+          </>
+        ) : (
+          <>
+            {/* The words before fade out as the new ones fade in, both in the same place and both
+                following the session clock, so nothing moves between them. */}
+            <div className="grid place-items-center">
+              <motion.span
+                aria-hidden
+                style={{ opacity: fadingOut, gridArea: '1 / 1' }}
+                className={`text-2xl font-bold ${textColour} text-center`}
+              >
+                {previousPrompt}
+              </motion.span>
+              <motion.span
+                aria-live="polite"
+                style={{ opacity: fade, gridArea: '1 / 1' }}
+                className={`text-2xl font-bold ${textColour} text-center`}
+              >
+                {prompt}
+              </motion.span>
+            </div>
 
-        {breathingState !== 'completed' && breathingState !== 'idle' && (
-          <motion.span
-            key={countdown}
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className={`text-5xl font-bold ${['idle', 'completed'].includes(breathingState) ? 'text-gray-800' : 'text-white'}`}
-          >
-            {countdown}
-          </motion.span>
+            {breathingState !== 'completed' && breathingState !== 'idle' && (
+              <motion.span
+                key={countdown}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className={`text-5xl font-bold ${['idle', 'completed'].includes(breathingState) ? 'text-gray-800' : 'text-white'}`}
+              >
+                {countdown}
+              </motion.span>
+            )}
+          </>
         )}
       </div>
 

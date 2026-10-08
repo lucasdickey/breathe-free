@@ -113,6 +113,7 @@ export function useBreathingSession() {
   const [snapshot, setSnapshot] = useState<SessionSnapshot>(IDLE_SNAPSHOT);
   const [volume, setVolume] = useState(0.7);
   const [isMuted, setIsMuted] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   /** How full the lungs are right now, 0..1; updated every frame without re-rendering. */
   const level = useMotionValue(0);
   /** How far the words have crossed from the last phase's to this one's, 0..1; also per frame. */
@@ -124,6 +125,9 @@ export function useBreathingSession() {
   const masterGainRef = useRef<GainNode | null>(null);
   const rafRef = useRef<number>(0);
   const runningRef = useRef(false);
+  /** Hold and release the running session; set by start() for the session it starts. */
+  const pauseRef = useRef<(() => void) | null>(null);
+  const resumeRef = useRef<(() => Promise<void>) | null>(null);
 
   const volumeRef = useRef(volume);
   const mutedRef = useRef(isMuted);
@@ -198,12 +202,17 @@ export function useBreathingSession() {
   const start = useCallback(async (cycles: number, mode: SoundMode = 'ambient') => {
     stopTicker();
     stopAudio();
+    pauseRef.current = null;
+    resumeRef.current = null;
+    setIsPaused(false);
 
     // Without sound the session runs on the page's own clock.
     let now = () => performance.now() / 1000;
     let t0 = now() + LEAD_SECONDS;
 
     const ctx = mode === 'silent' ? null : getContext();
+    // Set when the session runs on the audio clock: re-locks the picture to the sound.
+    let resync: (() => void) | null = null;
     if (ctx) {
       if (ctx.state === 'suspended') {
         // Give the browser a moment to start audio; if it won't, carry on silently.
@@ -258,6 +267,9 @@ export function useBreathingSession() {
           offset += (audible() - page - offset) * 0.1;
           return page + offset;
         };
+        resync = () => {
+          offset = audible() - performance.now() / 1000;
+        };
         t0 = startTime;
       }
     }
@@ -296,12 +308,72 @@ export function useBreathingSession() {
       }
       rafRef.current = requestAnimationFrame(tick);
     };
+
+    // Pausing holds session time where it is. On the page clock the start moves later by
+    // the time spent paused. On the audio clock the sound fades out and then the context is
+    // suspended, which stops its clock: picture and synth both stand still at the same
+    // moment, and on resume both carry on from it.
+    let paused = false;
+    let heldAt = 0;
+    let suspendTimer: ReturnType<typeof setTimeout> | null = null;
+    const stopFrames = () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = 0;
+    };
+    pauseRef.current = () => {
+      if (paused || !runningRef.current) return;
+      paused = true;
+      setIsPaused(true);
+      if (ctx && resync) {
+        const audioCtx = ctx;
+        masterGainRef.current?.gain.setTargetAtTime(0, audioCtx.currentTime, 0.06);
+        // The picture runs on through the fade, then stops with the audio clock.
+        suspendTimer = setTimeout(() => {
+          suspendTimer = null;
+          if (!paused || !runningRef.current) return;
+          stopFrames();
+          audioCtx.suspend().catch(() => {});
+        }, 320);
+      } else {
+        stopFrames();
+        heldAt = performance.now() / 1000;
+      }
+    };
+    resumeRef.current = async () => {
+      if (!paused || !runningRef.current) return;
+      if (ctx && resync) {
+        if (suspendTimer) {
+          clearTimeout(suspendTimer);
+          suspendTimer = null;
+        }
+        if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
+        resync();
+        masterGainRef.current?.gain.setTargetAtTime(mutedRef.current ? 0 : volumeRef.current, ctx.currentTime, 0.2);
+      } else {
+        t0 += performance.now() / 1000 - heldAt;
+      }
+      paused = false;
+      setIsPaused(false);
+      if (!rafRef.current && runningRef.current) rafRef.current = requestAnimationFrame(tick);
+    };
+
     tick();
   }, [fade, getContext, level, loadWorklet, stopAudio, stopTicker]);
+
+  /** Hold the session still where it is (the pause button, or the space bar). */
+  const pause = useCallback(() => pauseRef.current?.(), []);
+  /** Carry on from the moment the session was paused. */
+  const resume = useCallback(() => {
+    void resumeRef.current?.();
+  }, []);
+  const togglePause = useCallback(() => (isPaused ? resume() : pause()), [isPaused, pause, resume]);
 
   const stop = useCallback(() => {
     stopTicker();
     stopAudio();
+    pauseRef.current = null;
+    resumeRef.current = null;
+    setIsPaused(false);
     level.set(0);
     fade.set(1);
     setSnapshot(IDLE_SNAPSHOT);
@@ -309,6 +381,9 @@ export function useBreathingSession() {
 
   const reset = useCallback(() => {
     stopTicker();
+    pauseRef.current = null;
+    resumeRef.current = null;
+    setIsPaused(false);
     level.set(0);
     fade.set(1);
     setSnapshot(IDLE_SNAPSHOT);
@@ -353,6 +428,10 @@ export function useBreathingSession() {
     start,
     stop,
     reset,
+    isPaused,
+    pause,
+    resume,
+    togglePause,
     volume,
     isMuted,
     toggleMute,

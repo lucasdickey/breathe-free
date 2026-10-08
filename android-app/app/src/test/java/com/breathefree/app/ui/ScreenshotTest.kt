@@ -103,6 +103,30 @@ class ScreenshotTest {
     }
 
     @Test
+    fun pausedAtNoon() {
+        val controller = controller()
+        controller.chooseCycles(2)
+        compose.setContent { BreatheApp(controller) { today(12, 30) } }
+        compose.mainClock.advanceTimeBy(2_500)
+        session(controller, "paused-noon", listOf(13.6 to "1-holding"))
+        compose.onNodeWithContentDescription("Pause session").performClick()
+        compose.mainClock.advanceTimeBy(5_000)
+        shot("paused-noon-2-paused")
+    }
+
+    @Test
+    fun pausedAtNight() {
+        val controller = controller()
+        controller.chooseCycles(2)
+        compose.setContent { BreatheApp(controller) { today(20, 49) } }
+        compose.mainClock.advanceTimeBy(2_500)
+        session(controller, "paused-night", listOf(13.6 to "1-holding"))
+        compose.onNodeWithContentDescription("Pause session").performClick()
+        compose.mainClock.advanceTimeBy(5_000)
+        shot("paused-night-2-paused")
+    }
+
+    @Test
     fun homeThroughTheDay() {
         val controller = controller()
         var now = today(6, 0)

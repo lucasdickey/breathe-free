@@ -13,8 +13,8 @@ android {
         applicationId = "com.breathefree.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "2.2"
+        versionCode = 6
+        versionName = "2.3"
     }
 
     // Release builds are signed with the key described in keystore.properties when that file

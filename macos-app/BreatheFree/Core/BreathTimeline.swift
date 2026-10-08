@@ -218,3 +218,30 @@ enum BoxGeometry {
         return (cx + x, cy - y)
     }
 }
+
+/// A session in progress: its plan and the host time, in seconds (CACurrentMediaTime in the
+/// app), at which its time is zero. While paused, its time stands still at `pausedAt`.
+struct ActiveSession: Equatable {
+    let plan: SessionPlan
+    let startTime: Double
+    /// The host time it was paused at; nil while it runs.
+    var pausedAt: Double? = nil
+
+    var isPaused: Bool { pausedAt != nil }
+
+    /// Session time at host time `host`: the seconds since the start, less any time paused.
+    func time(at host: Double) -> Double { (pausedAt ?? host) - startTime }
+
+    /// The same session held still at `host`. Pausing a paused session changes nothing.
+    func paused(at host: Double) -> ActiveSession {
+        guard pausedAt == nil else { return self }
+        return ActiveSession(plan: plan, startTime: startTime, pausedAt: host)
+    }
+
+    /// Carries on from where it was held: the start moves later by the time spent paused, so
+    /// the session picks up at the moment it stopped. Resuming a running session changes nothing.
+    func resumed(at host: Double) -> ActiveSession {
+        guard let held = pausedAt else { return self }
+        return ActiveSession(plan: plan, startTime: startTime + (host - held))
+    }
+}

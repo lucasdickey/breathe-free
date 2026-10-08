@@ -106,4 +106,50 @@ final class BreathTimelineTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - Pause
+
+    func testPausedTimeStandsStill() {
+        let running = ActiveSession(plan: SessionPlan(cycles: 2), startTime: 100)
+        XCTAssertFalse(running.isPaused)
+        XCTAssertEqual(running.time(at: 110), 10, accuracy: 1e-12)
+        let held = running.paused(at: 110)
+        XCTAssertTrue(held.isPaused)
+        for host in [110.0, 111, 140, 10_000] {
+            XCTAssertEqual(held.time(at: host), 10, accuracy: 1e-12)
+        }
+    }
+
+    func testResumingCarriesOnFromTheMomentItStopped() {
+        let plan = SessionPlan(cycles: 2)
+        let held = ActiveSession(plan: plan, startTime: 100).paused(at: 113.25) // 13.25 s in
+        let resumed = held.resumed(at: 400)
+        XCTAssertFalse(resumed.isPaused)
+        XCTAssertEqual(resumed.time(at: 400), 13.25, accuracy: 1e-9)
+        XCTAssertEqual(resumed.time(at: 401.5), 14.75, accuracy: 1e-9)
+        // The picture carries on from the same breath: same phase, same level, no jump.
+        let before = plan.frame(at: held.time(at: 399))
+        let after = plan.frame(at: resumed.time(at: 400))
+        XCTAssertEqual(before.phaseIndex, after.phaseIndex)
+        XCTAssertEqual(before.level, after.level, accuracy: 1e-9)
+        XCTAssertEqual(before.countdown, after.countdown)
+    }
+
+    func testPausesAddUp() {
+        var s = ActiveSession(plan: SessionPlan(cycles: 3), startTime: 0)
+        s = s.paused(at: 10).resumed(at: 30)  // 20 s away
+        XCTAssertEqual(s.time(at: 35), 15, accuracy: 1e-9)
+        s = s.paused(at: 35).resumed(at: 95)  // another 60 s away
+        XCTAssertEqual(s.time(at: 95), 15, accuracy: 1e-9)
+        XCTAssertEqual(s.time(at: 100), 20, accuracy: 1e-9)
+    }
+
+    func testPausingTwiceOrResumingARunningSessionChangesNothing() {
+        let running = ActiveSession(plan: SessionPlan(cycles: 2), startTime: 50)
+        XCTAssertEqual(running.resumed(at: 70), running)
+        let held = running.paused(at: 60)
+        XCTAssertEqual(held.paused(at: 90), held)
+        // A clock that reads earlier than the pause never moves the session backwards.
+        XCTAssertEqual(held.resumed(at: 55).time(at: 55), 10, accuracy: 1e-9)
+    }
 }

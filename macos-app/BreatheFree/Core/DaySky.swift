@@ -39,11 +39,6 @@ struct RGB: Equatable {
         return RGB(oklab: (a.0 + (o.0 - a.0) * t, a.1 + (o.1 - a.1) * t, a.2 + (o.2 - a.2) * t))
     }
 
-    /// Lighter by a factor of 1 + k, hue kept.
-    func brightened(_ k: Double) -> RGB {
-        RGB(r: min(1, r * (1 + k)), g: min(1, g * (1 + k)), b: min(1, b * (1 + k)))
-    }
-
     /// Relative luminance, as WCAG defines it.
     var luminance: Double {
         0.2126 * Self.linear(r) + 0.7152 * Self.linear(g) + 0.0722 * Self.linear(b)

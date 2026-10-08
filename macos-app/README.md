@@ -14,8 +14,8 @@ hold for four, with an eight-second settle at the start.
 - **The sky** follows the time of day: night with stars, blue hour, sunrise, day,
   golden hour, sunset and dusk, timed from that day's sunrise and sunset (worked out
   from the date, so no location is needed; `Core/DaySky.swift`). Text and buttons turn
-  light when the sky is dark. During a session it brightens a little as you fill up.
-  The clouds are drawn procedurally, so they drift and slowly change shape.
+  light when the sky is dark. It holds steady through the breath, and the clouds are
+  drawn procedurally, so they drift on without a break and slowly change shape.
 - **The sound** is generated as it plays, not looped from a file:
   - a low D drone with two upper notes that change each cycle and bloom on the inhale,
   - soft filtered "air" that only moves while breath moves,

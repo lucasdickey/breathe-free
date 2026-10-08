@@ -17,11 +17,10 @@ import SwiftUI
 /// The sky for one moment, held still.
 private struct StillSky: View {
     let sky: SkyPalette
-    var level = 0.0
 
     var body: some View {
         Canvas { context, size in
-            SceneDrawing.sky(&context, size: size, palette: sky, level: level)
+            SceneDrawing.sky(&context, size: size, palette: sky)
             StarField.shared.draw(in: &context, size: size, time: 40, amount: sky.stars)
             let sprite = context.resolve(Image(decorative: CloudField.puff, scale: 1))
             CloudField.shared.draw(in: &context, size: size, time: 40, palette: sky, sprite: sprite)
@@ -46,9 +45,9 @@ struct Snapshots {
             return DaySky.look(at: date, in: zone)
         }
 
-        func shoot<V: View>(_ name: String, _ look: DayLook, level: Double = 0, _ view: V) {
+        func shoot<V: View>(_ name: String, _ look: DayLook, _ view: V) {
             let scene = ZStack {
-                StillSky(sky: look.sky, level: level)
+                StillSky(sky: look.sky)
                 view
             }
             .environment(\.ink, Ink.matching(look))
@@ -69,9 +68,8 @@ struct Snapshots {
             }
         }
 
-        func session(at t: Double) -> (ActiveSession, Double) {
-            let session = ActiveSession(plan: SessionPlan(cycles: 2), startTime: CACurrentMediaTime() - t)
-            return (session, session.plan.frame(at: t).level)
+        func session(at t: Double) -> ActiveSession {
+            ActiveSession(plan: SessionPlan(cycles: 2), startTime: CACurrentMediaTime() - t)
         }
 
         let noon = at(12, 30)
@@ -84,11 +82,14 @@ struct Snapshots {
         shoot("1-home-session-length-open", noon, HomeView(model: model, choosing: true))
         shoot("1-home-session-length-open-night", night, HomeView(model: model, choosing: true))
         for (name, t) in [("2-settle", 3.0), ("3-inhale", 9.9), ("4-hold", 13.6), ("5-exhale", 17.6)] {
-            let (s, level) = session(at: t)
-            shoot("\(name)-night", night, level: level, SessionView(model: model, session: s))
+            shoot("\(name)-night", night, SessionView(model: model, session: session(at: t)))
         }
-        let (s, level) = session(at: 9.9)
-        shoot("3-inhale-noon", noon, level: level, SessionView(model: model, session: s))
+        shoot("3-inhale-noon", noon, SessionView(model: model, session: session(at: 9.9)))
+        // Paused part way through a hold: the scene dims and the words give way to "Paused".
+        let now = CACurrentMediaTime()
+        let held = ActiveSession(plan: SessionPlan(cycles: 2), startTime: now - 13.6).paused(at: now)
+        shoot("4-hold-paused-noon", noon, SessionView(model: model, session: held))
+        shoot("4-hold-paused-night", night, SessionView(model: model, session: held))
         shoot("6-done-night", night, DoneView(model: model))
         shoot("6-done-noon", noon, DoneView(model: model))
     }

@@ -51,11 +51,10 @@ private struct Script: Decodable {
 private struct StillSky: View {
     let sky: SkyPalette
     let time: Double
-    var level = 0.0
 
     var body: some View {
         Canvas { context, size in
-            SceneDrawing.sky(&context, size: size, palette: sky, level: level)
+            SceneDrawing.sky(&context, size: size, palette: sky)
             StarField.shared.draw(in: &context, size: size, time: time, amount: sky.stars)
             let sprite = context.resolve(Image(decorative: CloudField.puff, scale: 1))
             CloudField.shared.draw(in: &context, size: size, time: time, palette: sky, sprite: sprite)
@@ -119,9 +118,8 @@ struct Promo {
                             .environment(\.pickerMoment, changed.map { PickerMoment(changedAt: $0, previous: before) })
                     })
                 } else {
-                    let level = session.plan.frame(at: v - lag).level
                     scene = AnyView(ZStack {
-                        StillSky(sky: look.sky, time: v, level: level)
+                        StillSky(sky: look.sky, time: v)
                         SessionView(model: model, session: session)
                     })
                 }
