@@ -39,3 +39,21 @@ runs at its true pace and every bell lands on its frame.
 
    Add `--stills=3.6,12.5` to draw just those moments as pictures beside the output, to
    check the look in seconds before a full encode.
+
+## The 10-second time-of-day spot
+
+`sun.json` is a shorter timeline for an update: the session is already breathing while the
+clock sweeps from 5:54 in the morning to past midnight, so the sky and the light on the orb go
+round a whole day in about eight seconds. `sun.py` edits it: the Mac window and the phone side
+by side on their sky, a clock and a sun dial following the sweep (the dial's sun takes the
+same path as the light on the orb), two captions and an end card, over the app's own sound.
+
+```bash
+cd android-app
+./gradlew testDebugUnitTest -Ppromo -PpromoScript=sun.json --tests '*ui.PromoTest*' --tests '*PromoAudioTest*'
+# Mac frames: run the "Promo footage" workflow by hand, with script sun.json
+python3 promo/sun.py <mac frames> android-app/app/build/promo/android-sun \
+  android-app/app/build/promo/audio breathe-free-sun.mp4
+```
+
+`--stills=` works here too.
