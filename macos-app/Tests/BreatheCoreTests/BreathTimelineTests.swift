@@ -152,4 +152,19 @@ final class BreathTimelineTests: XCTestCase {
         // A clock that reads earlier than the pause never moves the session backwards.
         XCTAssertEqual(held.resumed(at: 55).time(at: 55), 10, accuracy: 1e-9)
     }
+
+    func testRingsStopAtTheBox() {
+        let h = 160.0
+        for start in [0.36 * h, 0.82 * h] {
+            let life = BoxGeometry.rippleSeconds(start: start, h: h)
+            for age in stride(from: 0.0, through: life + 1, by: 0.01) {
+                XCTAssertLessThanOrEqual(BoxGeometry.rippleRadius(start: start, age: age, h: h), h, "past the box at \(age) s")
+            }
+            XCTAssertEqual(BoxGeometry.rippleRadius(start: start, age: life, h: h), h, accuracy: 1e-9)
+        }
+        // From a full orb it is a short pulse to the sides; from an empty one it crosses the box.
+        XCTAssertEqual(BoxGeometry.rippleSeconds(start: 0.82 * h, h: h), 0.6, accuracy: 1e-9)
+        XCTAssertEqual(BoxGeometry.rippleSeconds(start: 0.36 * h, h: h), 0.64 / 0.3, accuracy: 1e-9)
+        XCTAssertEqual(BoxGeometry.rippleSeconds(start: h, h: h), 0)
+    }
 }

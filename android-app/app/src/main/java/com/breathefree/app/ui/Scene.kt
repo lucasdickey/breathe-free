@@ -140,7 +140,7 @@ class SessionPainter {
             )
         }
 
-        // Ripples: a ring leaves the orb at each change of phase.
+        // Ripples: a ring leaves the orb at each change of phase and spreads as far as the box.
         if (frame.stage == Stage.BREATHING) {
             ripple(g, frame.phase!!, frame.phaseElapsed, ink.line)
             if (frame.phaseIndex > 0) {
@@ -176,13 +176,15 @@ class SessionPainter {
     }
 
     private fun DrawScope.ripple(g: SceneGeometry, phase: Phase, age: Double, color: Color) {
-        if (age >= RIPPLE_SECONDS) return
-        val startRadius = if (phase == Phase.INHALE || phase == Phase.HOLD_EMPTY) g.orbMin else g.orbMax
+        val start = (if (phase == Phase.INHALE || phase == Phase.HOLD_EMPTY) g.orbMin else g.orbMax).toDouble()
+        val h = g.half.toDouble()
+        val life = BoxGeometry.rippleSeconds(start, h)
+        if (age >= life) return
         val strength = if (phase == Phase.INHALE || phase == Phase.EXHALE) 0.32f else 0.2f
-        val fade = (1 - age / RIPPLE_SECONDS).toFloat()
+        val fade = (1 - age / life).toFloat()
         drawCircle(
             color = color.copy(alpha = strength * fade * fade),
-            radius = startRadius + (age * g.half * 0.3).toFloat(),
+            radius = BoxGeometry.rippleRadius(start, age, h).toFloat(),
             center = Offset(g.cx, g.cy),
             style = Stroke(width = density * 1.5f),
         )
@@ -204,6 +206,5 @@ class SessionPainter {
 
     private companion object {
         const val STEPS_PER_SIDE = 96
-        const val RIPPLE_SECONDS = 2.4
     }
 }

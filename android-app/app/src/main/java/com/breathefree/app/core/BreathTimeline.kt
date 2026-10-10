@@ -236,4 +236,16 @@ object BoxGeometry {
         out[0] = cx + x
         out[1] = cy - y
     }
+
+    /** How fast a ring spreads from the orb, in half-sizes of the box per second. */
+    const val RIPPLE_PACE = 0.3
+
+    /**
+     * How long a ring that leaves an orb of radius [start] takes to reach the sides of a box of
+     * half-size [h]. It ends there, fading out on the way, so it never spreads past the box.
+     */
+    fun rippleSeconds(start: Double, h: Double): Double = maxOf(0.0, (h - start) / (h * RIPPLE_PACE))
+
+    /** That ring's radius [age] seconds after it left the orb. */
+    fun rippleRadius(start: Double, age: Double, h: Double): Double = minOf(h, start + age * h * RIPPLE_PACE)
 }

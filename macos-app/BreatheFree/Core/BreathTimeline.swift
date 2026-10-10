@@ -217,6 +217,20 @@ enum BoxGeometry {
         }
         return (cx + x, cy - y)
     }
+
+    /// How fast a ring spreads from the orb, in half-sizes of the box per second.
+    static let ripplePace = 0.3
+
+    /// How long a ring that leaves an orb of radius `start` takes to reach the sides of a box of
+    /// half-size `h`. It ends there, fading out on the way, so it never spreads past the box.
+    static func rippleSeconds(start: Double, h: Double) -> Double {
+        max(0, (h - start) / (h * ripplePace))
+    }
+
+    /// That ring's radius `age` seconds after it left the orb.
+    static func rippleRadius(start: Double, age: Double, h: Double) -> Double {
+        min(h, start + age * h * ripplePace)
+    }
 }
 
 /// A session in progress: its plan and the host time, in seconds (CACurrentMediaTime in the

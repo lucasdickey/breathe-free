@@ -326,8 +326,6 @@ struct SceneGeometry {
 }
 
 enum SceneDrawing {
-    private static let ripplesLast = 2.4
-
     /// The sky's gradient. It holds steady through the breath so the clouds drift on unchanged: a
     /// sky that lightened with each breath in washed them out, and their coming back on the breath
     /// out looked like them starting over every cycle.
@@ -392,7 +390,7 @@ enum SceneDrawing {
         if frame.stage == .breathing {
             context.stroke(boxPath(g, to: Double(side) + along), with: .color(ink.line.color(0.5)),
                            style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
-            // Ripples: a ring leaves the orb at each change of phase.
+            // Ripples: a ring leaves the orb at each change of phase and spreads as far as the box.
             if let phase = frame.phase {
                 ripple(&context, g, phase: phase, age: frame.phaseElapsed, color: ink.line)
                 if frame.phaseIndex > 0, let previous = Phase(rawValue: (frame.phaseIndex - 1) % 4) {
@@ -424,11 +422,13 @@ enum SceneDrawing {
     }
 
     private static func ripple(_ context: inout GraphicsContext, _ g: SceneGeometry, phase: Phase, age: Double, color: Paint) {
-        guard age < ripplesLast else { return }
-        let startRadius = (phase == .inhale || phase == .holdEmpty) ? g.orbMin : g.orbMax
+        let start = (phase == .inhale || phase == .holdEmpty) ? g.orbMin : g.orbMax
+        let life = BoxGeometry.rippleSeconds(start: start, h: g.half)
+        guard age < life else { return }
         let strength = (phase == .inhale || phase == .exhale) ? 0.32 : 0.2
-        let fade = 1 - age / ripplesLast
-        context.stroke(Path(ellipseIn: circle(CGPoint(x: g.cx, y: g.cy), startRadius + age * g.half * 0.3)),
+        let fade = 1 - age / life
+        let radius = BoxGeometry.rippleRadius(start: start, age: age, h: g.half)
+        context.stroke(Path(ellipseIn: circle(CGPoint(x: g.cx, y: g.cy), radius)),
                        with: .color(color.color(strength * fade * fade)), lineWidth: 1.5)
     }
 
