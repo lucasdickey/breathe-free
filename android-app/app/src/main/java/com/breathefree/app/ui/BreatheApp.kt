@@ -135,7 +135,9 @@ fun BreatheApp(controller: BreatheController, clock: () -> ZonedDateTime = { Zon
 
     // Text and controls turn light when the sky turns dark, easing across over a second.
     val darkness by animateFloatAsState(if (look.dark) 1f else 0f, tween(1200), label = "ink")
-    val ink = remember(darkness, look.softness) { Ink.between(Ink.OnLight, Ink.OnDark, darkness).softened(look.softness) }
+    val ink = remember(darkness, look.softness, look.sun) {
+        Ink.between(Ink.OnLight, Ink.OnDark, darkness).softened(look.softness).copy(sun = look.sun.toFloat())
+    }
 
     LaunchedEffect(look.dark) {
         // Status bar icons the same way round as the text.
@@ -222,7 +224,7 @@ private fun HomeScreen(controller: BreatheController, frameNanos: State<Long>) {
             Canvas(Modifier.size(132.dp)) {
                 val t = frameNanos.value / 1e9
                 val level = (0.5 - 0.5 * cos(2 * PI * t / 10.0)).toFloat()
-                drawOrb(center, size.minDimension * (0.2f + 0.1f * level), level, ink.orb)
+                drawOrb(center, size.minDimension * (0.2f + 0.1f * level), level, ink.orb, ink.sun)
             }
             Spacer(Modifier.height(8.dp))
             BasicText(
@@ -553,7 +555,7 @@ private fun DoneScreen(controller: BreatheController, frameNanos: State<Long>) {
             Canvas(Modifier.size(150.dp)) {
                 val t = frameNanos.value / 1e9
                 val level = (0.35 + 0.25 * (0.5 - 0.5 * cos(2 * PI * t / 12.0))).toFloat()
-                drawOrb(center, size.minDimension * (0.2f + 0.12f * level), level, ink.orb)
+                drawOrb(center, size.minDimension * (0.2f + 0.12f * level), level, ink.orb, ink.sun)
             }
             Spacer(Modifier.height(12.dp))
             BasicText(

@@ -103,6 +103,8 @@ struct DayLook: Equatable {
     /// How far secondary text may fade from the main text colour: 1 is its own softer tone,
     /// 0 is the main colour. Below 1 only around dawn and dusk, while the sky is half lit.
     let softness: Double
+    /// Where the sun is, as an angle round the orb (`DaySky.sunAngle`): the side it is lit from.
+    let sun: Double
 }
 
 /// The sky follows the clock: night, blue hour, a hazy violet as the light turns, sunrise,
@@ -130,7 +132,8 @@ enum DaySky {
         let dark = worstContrast(lightText.main, sky) > worstContrast(darkText.main, sky)
         let text = dark ? lightText : darkText
         let softness = min(max((worstContrast(text.soft, sky) - 2.6) / (3.4 - 2.6), 0), 1)
-        return DayLook(sky: sky, dark: dark, softness: softness)
+        let sun = sunAngle(atHour: hour, rise: rise, set: set, southern: isSouthern(zone))
+        return DayLook(sky: sky, dark: dark, softness: softness, sun: sun)
     }
 
     /// Sunrise and sunset on the day of `date`, in hours on the local clock.
@@ -149,6 +152,23 @@ enum DaySky {
         let saving = zone.daylightSavingTimeOffset(for: noonDate) / 3600
         let noon = 12 + saving - equationOfTimeMinutes / 60
         return (noon - halfDayHours, noon + halfDayHours)
+    }
+
+    /// Where the sun is at `hour`, as an angle round the orb in radians, so the orb can be lit
+    /// from that side: π at sunrise (the left), π/2 at midday (the top), 0 at sunset (the
+    /// right), then on round underneath through the night, -π/2 in the middle of it. That is
+    /// the sun's path as you face it, so south of the equator it runs the other way, rising on
+    /// the right.
+    static func sunAngle(atHour hour: Double, rise: Double, set: Double, southern: Bool) -> Double {
+        let day = set - rise
+        let angle: Double
+        if hour >= rise && hour <= set {
+            angle = .pi * (1 - (hour - rise) / day)
+        } else {
+            let sinceSunset = (hour - set + 24).truncatingRemainder(dividingBy: 24)
+            angle = -.pi * sinceSunset / (24 - day)
+        }
+        return southern ? .pi - angle : angle
     }
 
     static func isSouthern(_ zone: TimeZone) -> Bool {

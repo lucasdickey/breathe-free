@@ -98,6 +98,8 @@ data class Ink(
     val dot: Color,
     val dotGlow: Color,
     val orb: OrbColors,
+    /** Where the sun is, as an angle round the orb ([DaySky.sunAngle]): the side the orb is lit from. The upper left until a look says otherwise. */
+    val sun: Float = 2.29f,
 ) {
     /** Secondary text pulled toward the main colour by 1 - [softness] (see [DayLook.softness]). */
     fun softened(softness: Float): Ink = if (softness >= 1f) this else copy(soft = lerp(deep, soft, softness))

@@ -65,6 +65,9 @@ struct Ink: Equatable {
     var dot: Paint
     var dotGlow: Paint
     var orb: OrbColors
+    /// Where the sun is, as an angle round the orb (`DaySky.sunAngle`): the side the orb is lit
+    /// from. The upper left until a look says otherwise.
+    var sun = 0.73 * Double.pi
 
     /// The countdown on the orb is dark on any sky: white disappears into its lit centre.
     static let countdown = RGB(0x0B3A55)
@@ -88,6 +91,7 @@ struct Ink: Equatable {
     /// The colours for `look`, with secondary text held readable (`DayLook.softness`).
     static func matching(_ look: DayLook) -> Ink {
         var ink = look.dark ? onDark : onLight
+        ink.sun = look.sun
         if look.softness < 1 { ink.soft = ink.deep.mix(ink.soft, look.softness) }
         return ink
     }
@@ -335,8 +339,11 @@ enum SceneDrawing {
                      with: .linearGradient(gradient, startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
     }
 
+    /// How far from the middle the brightest spot sits, as a fraction of the radius.
+    private static let lightReach = 0.5
+
     static func orb(_ context: inout GraphicsContext, center: CGPoint, radius: Double, level: Double,
-                    colors: OrbColors, alpha: Double = 1) {
+                    colors: OrbColors, sun: Double, alpha: Double = 1) {
         guard alpha > 0, radius > 0 else { return }
         // Halo: strongest at the rim, then fading over much the same width at every breath, so it
         // stays close to the orb and leaves the clouds beyond the box alone.
@@ -354,7 +361,10 @@ enum SceneDrawing {
                 center: center, startRadius: 0, endRadius: haloRadius
             )
         )
-        // Body: lit from the upper left.
+        // Body: lit from where the sun is (`sun`, an angle round the orb), so the light goes
+        // round it through the day.
+        let light = CGPoint(x: center.x + radius * lightReach * cos(sun),
+                            y: center.y - radius * lightReach * sin(sun))
         let core = colors.coreLow.mix(colors.coreHigh, level)
         let edge = colors.edgeLow.mix(colors.edgeHigh, level)
         context.fill(
@@ -365,7 +375,7 @@ enum SceneDrawing {
                     .init(color: core.color(alpha), location: 0.35),
                     .init(color: edge.color(alpha), location: 1),
                 ]),
-                center: CGPoint(x: center.x - radius * 0.28, y: center.y - radius * 0.32),
+                center: light,
                 startRadius: 0, endRadius: radius * 1.45
             )
         )
@@ -401,7 +411,7 @@ enum SceneDrawing {
 
         let orbAlpha = settling ? min(max(t / 1.2, 0), 1) : 1
         orb(&context, center: CGPoint(x: g.cx, y: g.cy), radius: g.orbRadius(frame.level), level: frame.level,
-            colors: ink.orb, alpha: orbAlpha)
+            colors: ink.orb, sun: ink.sun, alpha: orbAlpha)
 
         // The dot fades in at the start corner as the settle ends.
         let dotAlpha: Double
