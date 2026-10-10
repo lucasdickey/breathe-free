@@ -1,5 +1,6 @@
 package com.breathefree.app.ui
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -416,22 +417,35 @@ fun RoundIconButton(
     }
 }
 
-/** A see-through capsule with words on it, for an action a symbol alone leaves unclear. */
+/**
+ * The ✕ that ends a session, in two steps so a stray tap can't: tapped, it opens into "End
+ * session", and a tap on that ends it. [open] says which it shows; [onClick] decides what a
+ * tap does.
+ */
 @Composable
-fun PillButton(label: String, onClick: () -> Unit, height: Dp = 44.dp) {
+fun EndSessionButton(open: Boolean, onClick: () -> Unit) {
     val ink = LocalInk.current
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    Box(
+    Row(
         Modifier
-            .height(height)
+            .height(44.dp)
             .clip(CircleShape)
             .background(if (pressed) ink.glassPressed else ink.glass)
             .pressable(interaction, Role.Button, onClick)
-            .padding(horizontal = 18.dp),
-        contentAlignment = Alignment.Center,
+            .semantics { contentDescription = if (open) "Tap again to end the session" else "End session" }
+            .animateContentSize(tween(220))
+            .padding(horizontal = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        BasicText(label, style = TextStyle(color = ink.deep, fontSize = 14.sp, fontWeight = FontWeight.SemiBold))
+        Canvas(Modifier.size(22.dp)) { Icons.close(this, ink.deep) }
+        if (open) {
+            BasicText(
+                "End session",
+                Modifier.padding(start = 6.dp, end = 5.dp),
+                style = TextStyle(color = ink.deep, fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+            )
+        }
     }
 }
 

@@ -257,24 +257,61 @@ struct RoundIconButton: View {
     }
 }
 
-/// A see-through capsule with words on it, for an action a symbol alone leaves unclear.
-struct PillButton: View {
-    let title: String
-    let action: () -> Void
+/// The ✕ that ends a session, in two steps so a stray click can't: clicked, it opens into "End
+/// session", and a click on that ends it. Escape does the same, pressed twice. Left alone it
+/// closes again, and a second click too quick to be meant (a double click on the ✕) does nothing.
+struct EndSessionButton: View {
+    let end: () -> Void
+    @State private var open: Bool
+    @State private var ready = false
     @Environment(\.ink) private var ink
 
+    /// How long it stays open for the second click, and how soon it starts to listen.
+    private static let openFor = Duration.seconds(4)
+    private static let readyAfter = Duration.milliseconds(300)
+    /// Opening and closing move the buttons beside it too, so the whole bar eases together.
+    private static let opening = Animation.easeOut(duration: 0.2)
+
+    init(open: Bool = false, end: @escaping () -> Void) {
+        _open = State(initialValue: open)
+        self.end = end
+    }
+
     var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(ink.deep.color)
-                .padding(.horizontal, 16)
-                .frame(height: 40)
-                .background(Capsule().fill(ink.glass.color))
-                .contentShape(Capsule())
+        Button {
+            if !open {
+                withAnimation(Self.opening) { open = true }
+            } else if ready {
+                end()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                if open {
+                    Text("End session").font(.system(size: 13, weight: .semibold))
+                }
+                Image(systemName: "xmark").font(.system(size: 15, weight: .semibold))
+            }
+            .foregroundColor(ink.deep.color)
+            .padding(.horizontal, open ? 14 : 0)
+            .frame(minWidth: 40, minHeight: 40, maxHeight: 40)
+            .background(Capsule().fill(ink.glass.color))
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .help(title)
+        .keyboardShortcut(.cancelAction)
+        .accessibilityLabel("End session")
+        .accessibilityHint(open ? "Press again to end the session." : "Asks before it ends the session.")
+        .help(open ? "Click again to end the session" : "End session")
+        .task(id: open) {
+            ready = false
+            guard open else { return }
+            do {
+                try await Task.sleep(for: Self.readyAfter)
+                ready = true
+                try await Task.sleep(for: Self.openFor - Self.readyAfter)
+                withAnimation(Self.opening) { open = false }
+            } catch {}
+        }
     }
 }
 

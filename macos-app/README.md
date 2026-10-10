@@ -25,7 +25,8 @@ hold for four, with an eight-second settle at the start.
   button in a session switches mode without stopping.
 - The Force Touch trackpad taps at each change if a finger is resting on it.
 
-Keys: **Return** begins, **Escape** ends a session.
+Keys: **Return** begins, **Space** pauses, and **Escape** pressed twice ends a session (the
+first press opens End session, the second ends it, as two clicks on the ✕ do).
 
 ## How the timing stays exact
 

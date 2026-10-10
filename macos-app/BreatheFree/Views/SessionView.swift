@@ -12,6 +12,8 @@ import QuartzCore
 struct SessionView: View {
     @ObservedObject var model: SessionModel
     let session: ActiveSession
+    /// Starts with End session open, as the screen renderer shows it.
+    var endOpen = false
     @State private var showVolume = false
     @Environment(\.ink) private var ink
 
@@ -120,9 +122,7 @@ struct SessionView: View {
                     }
                     .padding(16)
                 }
-            // Words rather than an ✕, which reads as closing a panel, not ending the session.
-            PillButton(title: "End session", action: model.endSession)
-                .keyboardShortcut(.cancelAction)
+            EndSessionButton(open: endOpen, end: model.endSession)
         }
         .padding(.top, 14)
         .padding(.horizontal, 16)

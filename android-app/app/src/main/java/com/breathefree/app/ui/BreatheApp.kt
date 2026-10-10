@@ -152,9 +152,8 @@ fun BreatheApp(controller: BreatheController, clock: () -> ZonedDateTime = { Zon
         onDispose { view.keepScreenOn = false }
     }
 
-    BackHandler(enabled = screen != Screen.HOME) {
-        if (screen == Screen.SESSION) controller.endSession() else controller.backHome()
-    }
+    // During a session, back asks before it ends anything (SessionScreen); afterwards it goes home.
+    BackHandler(enabled = screen == Screen.DONE) { controller.backHome() }
 
     val sprite = remember { makePuffSprite() }
     val clouds = remember { CloudField() }
@@ -349,6 +348,29 @@ private fun SessionScreen(
     val cycle by remember(active) { derivedStateOf { minOf(frame.value.cycle + 1, plan.cycles) } }
     val settling by remember(active) { derivedStateOf { frame.value.stage == Stage.SETTLE } }
 
+    // Ending takes two taps, so a stray one can't end a session: the ✕ opens into "End session",
+    // and a tap on that ends it. Left alone it closes again, and a second tap too quick to be
+    // meant (a double tap on the ✕) does nothing. Back works the same way.
+    var endOpen by remember { mutableStateOf(false) }
+    var endReady by remember { mutableStateOf(false) }
+    LaunchedEffect(endOpen) {
+        endReady = false
+        if (endOpen) {
+            delay(END_READY_MS)
+            endReady = true
+            delay(END_OPEN_MS - END_READY_MS)
+            endOpen = false
+        }
+    }
+    val askToEnd: () -> Unit = {
+        if (!endOpen) {
+            endOpen = true
+        } else if (endReady) {
+            controller.endSession()
+        }
+    }
+    BackHandler(enabled = controller.screen == Screen.SESSION, onBack = askToEnd)
+
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = LocalDensity.current
         val w = constraints.maxWidth.toFloat()
@@ -425,8 +447,7 @@ private fun SessionScreen(
                 .padding(horizontal = 16.dp, vertical = 10.dp),
         ) {
             Box(Modifier.align(Alignment.CenterStart)) {
-                // Words rather than an ✕, which reads as closing a panel, not ending the session.
-                PillButton("End session", controller::endSession)
+                EndSessionButton(endOpen, askToEnd)
             }
             BasicText(
                 clock(left),
@@ -472,6 +493,10 @@ private fun SessionScreen(
         }
     }
 }
+
+/** How long "End session" stays open for its second tap, and how soon it starts to listen. */
+private const val END_OPEN_MS = 4_000L
+private const val END_READY_MS = 300L
 
 @Composable
 private fun SoundButton(mode: SoundMode, onClick: () -> Unit) {

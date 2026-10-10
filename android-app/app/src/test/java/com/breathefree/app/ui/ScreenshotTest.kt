@@ -115,6 +115,19 @@ class ScreenshotTest {
     }
 
     @Test
+    fun endSessionOpenAtNoon() {
+        val controller = controller()
+        controller.chooseCycles(2)
+        compose.setContent { BreatheApp(controller) { today(12, 30) } }
+        compose.mainClock.advanceTimeBy(2_500)
+        // Just after a breath in begins, its ring part way to the box.
+        session(controller, "end-noon", listOf(8.8 to "1-ring"))
+        compose.onNodeWithContentDescription("End session").performClick()
+        compose.mainClock.advanceTimeBy(400)
+        shot("end-noon-2-open")
+    }
+
+    @Test
     fun pausedAtNight() {
         val controller = controller()
         controller.chooseCycles(2)

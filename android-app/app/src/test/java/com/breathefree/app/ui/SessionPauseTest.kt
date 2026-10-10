@@ -73,12 +73,51 @@ class SessionPauseTest {
     }
 
     @Test
-    fun endSessionSaysWhatItDoesAndGoesHome() {
+    fun endingTakesTwoTaps() {
         val controller = startSession()
         compose.mainClock.advanceTimeBy(5_000)
+        // The first tap only opens the ✕ into "End session".
+        compose.onNodeWithContentDescription("End session").performClick()
+        compose.mainClock.advanceTimeBy(100)
+        compose.onNodeWithText("End session").assertIsDisplayed()
+        assertEquals(Screen.SESSION, controller.screen)
+        // A second tap straight away, as a double tap on the ✕ would be, does nothing.
+        compose.onNodeWithText("End session").performClick()
+        compose.waitForIdle()
+        assertEquals(Screen.SESSION, controller.screen)
+        // A moment later, a tap on it ends the session.
+        compose.mainClock.advanceTimeBy(400)
         compose.onNodeWithText("End session").performClick()
         compose.waitForIdle()
         assertEquals(Screen.HOME, controller.screen)
         assertNull(controller.session)
+    }
+
+    @Test
+    fun endSessionClosesAgainIfLeft() {
+        val controller = startSession()
+        compose.mainClock.advanceTimeBy(5_000)
+        compose.onNodeWithContentDescription("End session").performClick()
+        compose.mainClock.advanceTimeBy(4_500)
+        compose.onNodeWithText("End session").assertDoesNotExist()
+        // Closed again, a tap only opens it.
+        compose.onNodeWithContentDescription("End session").performClick()
+        compose.mainClock.advanceTimeBy(100)
+        compose.onNodeWithText("End session").assertIsDisplayed()
+        assertEquals(Screen.SESSION, controller.screen)
+    }
+
+    @Test
+    fun backAsksBeforeEnding() {
+        val controller = startSession()
+        compose.mainClock.advanceTimeBy(5_000)
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.mainClock.advanceTimeBy(100)
+        compose.onNodeWithText("End session").assertIsDisplayed()
+        assertEquals(Screen.SESSION, controller.screen)
+        compose.mainClock.advanceTimeBy(400)
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+        assertEquals(Screen.HOME, controller.screen)
     }
 }

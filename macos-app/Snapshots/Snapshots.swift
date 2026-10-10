@@ -90,6 +90,9 @@ struct Snapshots {
         let held = ActiveSession(plan: SessionPlan(cycles: 2), startTime: now - 13.6).paused(at: now)
         shoot("4-hold-paused-noon", noon, SessionView(model: model, session: held))
         shoot("4-hold-paused-night", night, SessionView(model: model, session: held))
+        // End session open, waiting for the second click.
+        shoot("4-hold-end-open-noon", noon, SessionView(model: model, session: session(at: 13.6), endOpen: true))
+        shoot("4-hold-end-open-night", night, SessionView(model: model, session: session(at: 13.6), endOpen: true))
         shoot("6-done-night", night, DoneView(model: model))
         shoot("6-done-noon", noon, DoneView(model: model))
     }
