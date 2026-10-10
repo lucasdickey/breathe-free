@@ -17,7 +17,7 @@ hold for four, with an eight-second settle at the start.
   light when the sky is dark. It holds steady through the breath, and the clouds are
   drawn procedurally, so they drift on without a break and slowly change shape.
 - **The sound** is generated as it plays, not looped from a file:
-  - a low D drone with two upper notes that change each cycle and bloom on the inhale,
+  - a low D drone under two upper notes, the same chord every cycle, blooming on the inhale,
   - soft filtered "air" that only moves while breath moves,
   - a gentle bell exactly on each change: A for breathe in, D for breathe out,
     quieter high and low notes for the holds.
