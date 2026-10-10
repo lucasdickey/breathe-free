@@ -1,7 +1,8 @@
 name: Promo footage
 
 # Renders the Mac app's frames for the promo videos (promo/README.md) from its own views.
-# Runs when the promo script or the renderer changes, or by hand.
+# Runs when the promo script or the renderer changes, or by hand, when another timeline in
+# promo/ can be chosen (sun.json is the 10-second spot).
 on:
   push:
     paths:
@@ -9,6 +10,10 @@ on:
       - "macos-app/Promo/**"
       - ".github/workflows/promo.yml"
   workflow_dispatch:
+    inputs:
+      script:
+        description: "Which timeline in promo/ to render"
+        default: "script.json"
 
 jobs:
   mac:
@@ -18,12 +23,14 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Render
+        env:
+          SCRIPT: ${{ inputs.script || 'script.json' }}
         run: |
           swiftc -parse-as-library -O -o render-promo \
             macos-app/BreatheFree/Core/*.swift macos-app/BreatheFree/Audio/*.swift \
             macos-app/BreatheFree/Models/*.swift macos-app/BreatheFree/Views/*.swift \
             macos-app/Promo/Promo.swift
-          ./render-promo promo/script.json frames
+          ./render-promo "promo/$SCRIPT" frames
 
       - uses: actions/upload-artifact@v4
         with:
