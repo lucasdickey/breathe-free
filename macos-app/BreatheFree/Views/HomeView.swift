@@ -44,7 +44,7 @@ struct HomeView: View {
 
     private var content: some View {
         VStack(spacing: 0) {
-            AmbientOrb(colors: ink.orb)
+            AmbientOrb(colors: ink.orb, sun: ink.sun)
                 .frame(width: 112, height: 112)
             Text("Breathe Free")
                 .font(.system(size: 34, weight: .light))

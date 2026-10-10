@@ -97,4 +97,36 @@ final class DaySkyTests: XCTestCase {
         XCTAssertTrue(morning.contains(switches[0]), "morning switch at minute \(switches[0])")
         XCTAssertTrue(evening.contains(switches[1]), "evening switch at minute \(switches[1])")
     }
+
+    func testTheSunGoesRoundTheOrb() {
+        // Which way the light comes from on screen (y down), on a day with sunrise at 7 and sunset at 19.
+        func light(_ hour: Double, southern: Bool = false) -> (x: Double, y: Double) {
+            let a = DaySky.sunAngle(atHour: hour, rise: 7, set: 19, southern: southern)
+            return (cos(a), -sin(a))
+        }
+        func check(_ l: (x: Double, y: Double), _ x: Double, _ y: Double, line: UInt = #line) {
+            XCTAssertEqual(l.x, x, accuracy: 1e-9, line: line)
+            XCTAssertEqual(l.y, y, accuracy: 1e-9, line: line)
+        }
+        check(light(7), -1, 0)   // sunrise: the left
+        check(light(13), 0, -1)  // midday: the top
+        check(light(19), 1, 0)   // sunset: the right
+        check(light(1), 0, 1)    // the middle of the night: underneath
+        // South of the equator it rises on the right and sets on the left.
+        check(light(7, southern: true), 1, 0)
+        check(light(13, southern: true), 0, -1)
+        check(light(19, southern: true), -1, 0)
+        // It moves on smoothly all day, with no jump at sunrise, sunset or midnight.
+        var before = light(0)
+        for minute in 1...(24 * 60) {
+            let now = light(Double(minute) / 60)
+            XCTAssertLessThan(hypot(now.x - before.x, now.y - before.y), 0.01, "jump at minute \(minute)")
+            before = now
+        }
+        // A real day in Los Angeles: from the left soon after sunrise, from above at lunch.
+        let morning = DaySky.look(at: date(2026, 10, 7, 7, 30, in: losAngeles), in: losAngeles).sun
+        let lunch = DaySky.look(at: date(2026, 10, 7, 13, 0, in: losAngeles), in: losAngeles).sun
+        XCTAssertLessThan(cos(morning), -0.9)
+        XCTAssertGreaterThan(sin(lunch), 0.95)
+    }
 }

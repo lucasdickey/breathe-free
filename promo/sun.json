@@ -1,0 +1,11 @@
+{
+  "fps": 30,
+  "seconds": 10,
+  "date": "2026-10-07",
+  "zone": "America/Los_Angeles",
+  "sweep": { "start": 0.2, "end": 8.6, "fromHour": 5.9, "toHour": 24.4 },
+  "cycles": { "before": 6, "picked": 6 },
+  "taps": { "open": 0, "pick": 0, "begin": 0 },
+  "session": { "lagSeconds": -7.6 },
+  "endCard": 8.4
+}

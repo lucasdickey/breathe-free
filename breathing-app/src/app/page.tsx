@@ -6,6 +6,7 @@ import Balloon from './components/Balloon';
 import AudioControls from './components/AudioControls';
 import CloudBackground from './components/CloudBackground';
 import CycleDropdown from './components/CycleDropdown';
+import EndSessionButton from './components/EndSessionButton';
 import { useBreathingSession, BreathingPhase, CYCLE_SECONDS, SoundMode } from './hooks/useBreathingSession';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -239,14 +240,7 @@ export default function Home() {
                   <span className="rounded-full bg-white/80 backdrop-blur-sm px-4 py-2 shadow-md text-lg sm:text-xl font-semibold tabular-nums text-gray-800">
                     {`${minutesRemaining.toString().padStart(2, '0')}:${secondsRemaining.toString().padStart(2, '0')}`}
                   </span>
-                  {/* Words rather than an ✕, which reads as closing a panel, not ending the session. */}
-                  <button
-                    type="button"
-                    onClick={stop}
-                    className="rounded-full bg-white/80 backdrop-blur-sm px-4 py-2 shadow-md text-sm sm:text-base font-semibold text-gray-700 transition-colors hover:bg-white hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
-                  >
-                    End session
-                  </button>
+                  <EndSessionButton onEnd={stop} />
                 </div>
                 <div className="flex items-center gap-2">
                   {/* For when someone walks in: everything holds still until it is pressed again. */}

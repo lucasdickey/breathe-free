@@ -164,4 +164,22 @@ class BreathTimelineTest {
         assertEquals(2, out.boxSide())
         assertEquals(1.0 - out.level, out.boxFraction(), 1e-12)
     }
+
+    @Test
+    fun ringsStopAtTheBox() {
+        val h = 160.0
+        for (start in listOf(0.36 * h, 0.82 * h)) {
+            val life = BoxGeometry.rippleSeconds(start, h)
+            var age = 0.0
+            while (age <= life + 1.0) {
+                assertTrue("past the box at $age s", BoxGeometry.rippleRadius(start, age, h) <= h)
+                age += 0.01
+            }
+            assertEquals(h, BoxGeometry.rippleRadius(start, life, h), 1e-9)
+        }
+        // From a full orb it is a short pulse to the sides; from an empty one it crosses the box.
+        assertEquals(0.6, BoxGeometry.rippleSeconds(0.82 * h, h), 1e-9)
+        assertEquals(0.64 / 0.3, BoxGeometry.rippleSeconds(0.36 * h, h), 1e-9)
+        assertEquals(0.0, BoxGeometry.rippleSeconds(h, h), 0.0)
+    }
 }

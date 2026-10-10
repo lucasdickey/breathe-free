@@ -39,6 +39,8 @@ struct SkyView: View {
 /// A small orb that breathes slowly by itself, for the home and finish screens.
 struct AmbientOrb: View {
     let colors: OrbColors
+    /// The side it is lit from (`Ink.sun`).
+    let sun: Double
     var period = 10.0
     var depth = 1.0
 
@@ -49,7 +51,7 @@ struct AmbientOrb: View {
                 let level = depth * (0.5 - 0.5 * cos(2 * .pi * t / period))
                 let side = Double(min(size.width, size.height))
                 SceneDrawing.orb(&context, center: CGPoint(x: size.width / 2, y: size.height / 2),
-                                 radius: side * (0.2 + 0.1 * level), level: level, colors: colors)
+                                 radius: side * (0.2 + 0.1 * level), level: level, colors: colors, sun: sun)
             }
         }
         .accessibilityHidden(true)

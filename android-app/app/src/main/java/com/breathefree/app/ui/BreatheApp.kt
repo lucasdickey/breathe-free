@@ -135,7 +135,9 @@ fun BreatheApp(controller: BreatheController, clock: () -> ZonedDateTime = { Zon
 
     // Text and controls turn light when the sky turns dark, easing across over a second.
     val darkness by animateFloatAsState(if (look.dark) 1f else 0f, tween(1200), label = "ink")
-    val ink = remember(darkness, look.softness) { Ink.between(Ink.OnLight, Ink.OnDark, darkness).softened(look.softness) }
+    val ink = remember(darkness, look.softness, look.sun) {
+        Ink.between(Ink.OnLight, Ink.OnDark, darkness).softened(look.softness).copy(sun = look.sun.toFloat())
+    }
 
     LaunchedEffect(look.dark) {
         // Status bar icons the same way round as the text.
@@ -152,9 +154,8 @@ fun BreatheApp(controller: BreatheController, clock: () -> ZonedDateTime = { Zon
         onDispose { view.keepScreenOn = false }
     }
 
-    BackHandler(enabled = screen != Screen.HOME) {
-        if (screen == Screen.SESSION) controller.endSession() else controller.backHome()
-    }
+    // During a session, back asks before it ends anything (SessionScreen); afterwards it goes home.
+    BackHandler(enabled = screen == Screen.DONE) { controller.backHome() }
 
     val sprite = remember { makePuffSprite() }
     val clouds = remember { CloudField() }
@@ -223,7 +224,7 @@ private fun HomeScreen(controller: BreatheController, frameNanos: State<Long>) {
             Canvas(Modifier.size(132.dp)) {
                 val t = frameNanos.value / 1e9
                 val level = (0.5 - 0.5 * cos(2 * PI * t / 10.0)).toFloat()
-                drawOrb(center, size.minDimension * (0.2f + 0.1f * level), level, ink.orb)
+                drawOrb(center, size.minDimension * (0.2f + 0.1f * level), level, ink.orb, ink.sun)
             }
             Spacer(Modifier.height(8.dp))
             BasicText(
@@ -349,6 +350,29 @@ private fun SessionScreen(
     val cycle by remember(active) { derivedStateOf { minOf(frame.value.cycle + 1, plan.cycles) } }
     val settling by remember(active) { derivedStateOf { frame.value.stage == Stage.SETTLE } }
 
+    // Ending takes two taps, so a stray one can't end a session: the ✕ opens into "End session",
+    // and a tap on that ends it. Left alone it closes again, and a second tap too quick to be
+    // meant (a double tap on the ✕) does nothing. Back works the same way.
+    var endOpen by remember { mutableStateOf(false) }
+    var endReady by remember { mutableStateOf(false) }
+    LaunchedEffect(endOpen) {
+        endReady = false
+        if (endOpen) {
+            delay(END_READY_MS)
+            endReady = true
+            delay(END_OPEN_MS - END_READY_MS)
+            endOpen = false
+        }
+    }
+    val askToEnd: () -> Unit = {
+        if (!endOpen) {
+            endOpen = true
+        } else if (endReady) {
+            controller.endSession()
+        }
+    }
+    BackHandler(enabled = controller.screen == Screen.SESSION, onBack = askToEnd)
+
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = LocalDensity.current
         val w = constraints.maxWidth.toFloat()
@@ -425,8 +449,7 @@ private fun SessionScreen(
                 .padding(horizontal = 16.dp, vertical = 10.dp),
         ) {
             Box(Modifier.align(Alignment.CenterStart)) {
-                // Words rather than an ✕, which reads as closing a panel, not ending the session.
-                PillButton("End session", controller::endSession)
+                EndSessionButton(endOpen, askToEnd)
             }
             BasicText(
                 clock(left),
@@ -472,6 +495,10 @@ private fun SessionScreen(
         }
     }
 }
+
+/** How long "End session" stays open for its second tap, and how soon it starts to listen. */
+private const val END_OPEN_MS = 4_000L
+private const val END_READY_MS = 300L
 
 @Composable
 private fun SoundButton(mode: SoundMode, onClick: () -> Unit) {
@@ -528,7 +555,7 @@ private fun DoneScreen(controller: BreatheController, frameNanos: State<Long>) {
             Canvas(Modifier.size(150.dp)) {
                 val t = frameNanos.value / 1e9
                 val level = (0.35 + 0.25 * (0.5 - 0.5 * cos(2 * PI * t / 12.0))).toFloat()
-                drawOrb(center, size.minDimension * (0.2f + 0.12f * level), level, ink.orb)
+                drawOrb(center, size.minDimension * (0.2f + 0.12f * level), level, ink.orb, ink.sun)
             }
             Spacer(Modifier.height(12.dp))
             BasicText(

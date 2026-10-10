@@ -15,6 +15,8 @@ import com.breathefree.app.core.BreathFrame
 import com.breathefree.app.core.Phase
 import com.breathefree.app.core.SessionPlan
 import com.breathefree.app.core.Stage
+import kotlin.math.cos
+import kotlin.math.sin
 
 /** Where the box and orb sit, in pixels. The text layout uses the same numbers. */
 class SceneGeometry(val cx: Float, val cy: Float, val half: Float) {
@@ -63,7 +65,10 @@ class OrbColors(
     }
 }
 
-fun DrawScope.drawOrb(center: Offset, radius: Float, level: Float, colors: OrbColors, alpha: Float = 1f) {
+/** How far from the middle the orb's brightest spot sits, as a fraction of its radius. */
+private const val LIGHT_REACH = 0.5f
+
+fun DrawScope.drawOrb(center: Offset, radius: Float, level: Float, colors: OrbColors, sun: Float, alpha: Float = 1f) {
     if (alpha <= 0f || radius <= 0f) return
     // Halo: strongest at the rim, then fading over much the same width at every breath, so it
     // stays close to the orb and leaves the clouds beyond the box alone.
@@ -81,7 +86,9 @@ fun DrawScope.drawOrb(center: Offset, radius: Float, level: Float, colors: OrbCo
         radius = haloRadius,
         center = center,
     )
-    // Body: lit from the upper left.
+    // Body: lit from where the sun is ([sun], an angle round the orb), so the light goes round
+    // it through the day.
+    val light = Offset(center.x + radius * LIGHT_REACH * cos(sun), center.y - radius * LIGHT_REACH * sin(sun))
     val core = lerp(colors.coreLow, colors.coreHigh, level)
     val edge = lerp(colors.edgeLow, colors.edgeHigh, level)
     drawCircle(
@@ -89,7 +96,7 @@ fun DrawScope.drawOrb(center: Offset, radius: Float, level: Float, colors: OrbCo
             0f to Color.White.copy(alpha = 0.95f * alpha),
             0.35f to core.copy(alpha = alpha),
             1f to edge.copy(alpha = alpha),
-            center = Offset(center.x - radius * 0.28f, center.y - radius * 0.32f),
+            center = light,
             radius = radius * 1.45f,
         ),
         radius = radius,
@@ -140,7 +147,7 @@ class SessionPainter {
             )
         }
 
-        // Ripples: a ring leaves the orb at each change of phase.
+        // Ripples: a ring leaves the orb at each change of phase and spreads as far as the box.
         if (frame.stage == Stage.BREATHING) {
             ripple(g, frame.phase!!, frame.phaseElapsed, ink.line)
             if (frame.phaseIndex > 0) {
@@ -149,7 +156,7 @@ class SessionPainter {
         }
 
         val orbAlpha = if (settling) (t / 1.2).coerceIn(0.0, 1.0).toFloat() else 1f
-        drawOrb(Offset(g.cx, g.cy), g.orbRadius(frame.level), frame.level.toFloat(), ink.orb, orbAlpha)
+        drawOrb(Offset(g.cx, g.cy), g.orbRadius(frame.level), frame.level.toFloat(), ink.orb, ink.sun, orbAlpha)
 
         // The dot: fades in at the start corner as the settle ends.
         val dotAlpha = when {
@@ -176,13 +183,15 @@ class SessionPainter {
     }
 
     private fun DrawScope.ripple(g: SceneGeometry, phase: Phase, age: Double, color: Color) {
-        if (age >= RIPPLE_SECONDS) return
-        val startRadius = if (phase == Phase.INHALE || phase == Phase.HOLD_EMPTY) g.orbMin else g.orbMax
+        val start = (if (phase == Phase.INHALE || phase == Phase.HOLD_EMPTY) g.orbMin else g.orbMax).toDouble()
+        val h = g.half.toDouble()
+        val life = BoxGeometry.rippleSeconds(start, h)
+        if (age >= life) return
         val strength = if (phase == Phase.INHALE || phase == Phase.EXHALE) 0.32f else 0.2f
-        val fade = (1 - age / RIPPLE_SECONDS).toFloat()
+        val fade = (1 - age / life).toFloat()
         drawCircle(
             color = color.copy(alpha = strength * fade * fade),
-            radius = startRadius + (age * g.half * 0.3).toFloat(),
+            radius = BoxGeometry.rippleRadius(start, age, h).toFloat(),
             center = Offset(g.cx, g.cy),
             style = Stroke(width = density * 1.5f),
         )
@@ -204,6 +213,5 @@ class SessionPainter {
 
     private companion object {
         const val STEPS_PER_SIDE = 96
-        const val RIPPLE_SECONDS = 2.4
     }
 }

@@ -25,6 +25,8 @@ data class DayLook(
      * the softer tone would be hard to read.
      */
     val softness: Float,
+    /** Where the sun is, as an angle round the orb ([DaySky.sunAngle]): the side it is lit from. */
+    val sun: Double,
 )
 
 /**
@@ -51,7 +53,7 @@ object DaySky {
         val dark = worstContrast(Ink.OnDark.deep, sky) > worstContrast(Ink.OnLight.deep, sky)
         val ink = if (dark) Ink.OnDark else Ink.OnLight
         val softness = ((worstContrast(ink.soft, sky) - 2.6f) / (3.4f - 2.6f)).coerceIn(0f, 1f)
-        return DayLook(sky, dark, softness)
+        return DayLook(sky, dark, softness, sunAngle(hour, rise, set, isSouthern(time.zone)))
     }
 
     /** Sunrise and sunset on [date], in hours on the local clock. */
@@ -68,6 +70,24 @@ object DaySky {
         val saving = zone.rules.getDaylightSavings(date.atTime(12, 0).atZone(zone).toInstant())
         val noon = 12.0 + saving.seconds / 3600.0 - equationOfTimeMinutes / 60.0
         return (noon - halfDayHours) to (noon + halfDayHours)
+    }
+
+    /**
+     * Where the sun is at [hour], as an angle round the orb in radians, so the orb can be lit
+     * from that side: π at sunrise (the left), π/2 at midday (the top), 0 at sunset (the
+     * right), then on round underneath through the night, -π/2 in the middle of it. That is
+     * the sun's path as you face it, so south of the equator it runs the other way, rising on
+     * the right.
+     */
+    fun sunAngle(hour: Double, rise: Double, set: Double, southern: Boolean): Double {
+        val day = set - rise
+        val angle = if (hour in rise..set) {
+            PI * (1 - (hour - rise) / day)
+        } else {
+            val sinceSunset = (hour - set + 24) % 24
+            -PI * sinceSunset / (24 - day)
+        }
+        return if (southern) PI - angle else angle
     }
 
     fun isSouthern(zone: ZoneId): Boolean = SOUTHERN_ZONES.any { zone.id.startsWith(it) }

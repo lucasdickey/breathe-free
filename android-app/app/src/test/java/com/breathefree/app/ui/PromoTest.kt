@@ -42,6 +42,10 @@ import kotlin.math.roundToLong
  * length fanning out and a count being picked, Begin, then a whole breathing cycle at its true
  * pace. Writes JPEG frames and where the taps landed to build/promo/android.
  * Run with: ./gradlew testDebugUnitTest -Ppromo --tests '*PromoTest*'
+ *
+ * Another timeline in promo/ can be given with -PpromoScript=<file> (frames go to
+ * build/promo/android-<name>). One whose Begin is at 0 starts with the session already under
+ * way, with no taps: the 10-second spot (sun.json) is drawn that way.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -57,7 +61,8 @@ class PromoTest {
 
     @Test
     fun frames() {
-        val script = JSONObject(File("../../promo/script.json").readText())
+        val name = System.getProperty("promoScript").orEmpty().ifEmpty { "script.json" }
+        val script = JSONObject(File("../../promo/$name").readText())
         val fps = script.getInt("fps")
         val frames = (script.getDouble("seconds") * fps).toInt()
         val zone = ZoneId.of(script.getString("zone"))
@@ -66,7 +71,7 @@ class PromoTest {
         val cycles = script.getJSONObject("cycles")
         val taps = script.getJSONObject("taps")
         val lag = script.getJSONObject("session").getDouble("lagSeconds")
-        val out = File("build/promo/android").apply {
+        val out = File(if (name == "script.json") "build/promo/android" else "build/promo/android-${name.removeSuffix(".json")}").apply {
             deleteRecursively()
             mkdirs()
         }
@@ -74,7 +79,8 @@ class PromoTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         compose.mainClock.autoAdvance = false
         val controller = BreatheController(context) { compose.mainClock.currentTime * 1_000_000L }
-        controller.chooseCycles(cycles.getInt("before"))
+        val inSession = taps.getDouble("begin") <= 0.0
+        controller.chooseCycles(cycles.getInt(if (inSession) "picked" else "before"))
         controller.chooseSound(SoundMode.AMBIENT)
 
         // The sky's time of day eases from morning to night across the opening seconds.
@@ -127,16 +133,16 @@ class PromoTest {
             }
             compose.mainClock.advanceTimeBy(target - compose.mainClock.currentTime)
 
-            if (!opened && v >= taps.getDouble("open")) {
+            if (!inSession && !opened && v >= taps.getDouble("open")) {
                 opened = true
                 tap("open", compose.onNode(startsWith("Session length")), v)
             }
-            if (!picked && v >= taps.getDouble("pick")) {
+            if (!inSession && !picked && v >= taps.getDouble("pick")) {
                 picked = true
                 tap("pick", compose.onNode(startsWith("${cycles.getInt("picked")} cycles,")), v)
             }
             if (begun < 0 && v >= taps.getDouble("begin")) {
-                tap("begin", compose.onNodeWithText("Begin"), v)
+                if (inSession) compose.runOnUiThread { controller.begin() } else tap("begin", compose.onNodeWithText("Begin"), v)
                 begun = compose.mainClock.currentTime
                 // Straight on to this frame's moment in the session (an edit, like a cut).
                 compose.mainClock.advanceTimeBy(begun + LEAD_MS + ((v - lag) * 1000).roundToLong() - displayLeadMs - compose.mainClock.currentTime)

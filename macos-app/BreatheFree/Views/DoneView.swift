@@ -12,7 +12,7 @@ struct DoneView: View {
     var body: some View {
         let cycles = model.session?.plan.cycles ?? model.cycles
         VStack(spacing: 0) {
-            AmbientOrb(colors: ink.orb, period: 12, depth: 0.6)
+            AmbientOrb(colors: ink.orb, sun: ink.sun, period: 12, depth: 0.6)
                 .frame(width: 140, height: 140)
             Text("Well done")
                 .font(.system(size: 34, weight: .light))
