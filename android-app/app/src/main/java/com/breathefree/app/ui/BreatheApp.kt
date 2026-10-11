@@ -9,17 +9,17 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -48,6 +49,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,6 +64,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -72,12 +75,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -375,6 +381,11 @@ private fun SessionScreen(
     }
     BackHandler(enabled = controller.screen == Screen.SESSION, onBack = askToEnd)
 
+    // The volume slider under the speaker. It floats over the scene, so opening it moves
+    // nothing in the top bar; Back closes it before it would ask to end the session.
+    var volumeOpen by remember { mutableStateOf(false) }
+    BackHandler(enabled = volumeOpen) { volumeOpen = false }
+
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = LocalDensity.current
         val w = constraints.maxWidth.toFloat()
@@ -466,7 +477,10 @@ private fun SessionScreen(
                     if (paused) Icons.play(this, color) else Icons.pause(this, color)
                 }
                 Spacer(Modifier.width(10.dp))
-                SoundButton(controller.sessionSound, controller::nextSessionSound)
+                // How loud, as on the Mac; which sound plays is chosen on the home screen.
+                RoundIconButton("Volume, ${(controller.volume * 100).roundToInt()}%", { volumeOpen = !volumeOpen }) { color ->
+                    Icons.volume(this, color, controller.volume)
+                }
             }
         }
 
@@ -495,6 +509,27 @@ private fun SessionScreen(
                 )
             }
         }
+
+        if (volumeOpen) {
+            // Over everything else: a tap anywhere but the slider closes it, without also
+            // pressing whatever is underneath.
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) { detectTapGestures { volumeOpen = false } }
+                    .clearAndSetSemantics { },
+            )
+            VolumePanel(
+                controller.volume,
+                onChange = controller::chooseVolume,
+                onLeftAlone = { volumeOpen = false },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    // Just under the top bar's buttons (10 dp in, 44 dp high).
+                    .padding(top = 62.dp, end = 16.dp),
+            )
+        }
     }
 }
 
@@ -502,38 +537,76 @@ private fun SessionScreen(
 private const val END_OPEN_MS = 4_000L
 private const val END_READY_MS = 300L
 
+/** How long the volume slider stays open once it is left alone. */
+private const val VOLUME_OPEN_MS = 3_500L
+
+/**
+ * The volume slider, as on the Mac: quiet at the left, loud at the right. It closes itself
+ * when left alone for a few seconds; every touch starts the wait again.
+ */
 @Composable
-private fun SoundButton(mode: SoundMode, onClick: () -> Unit) {
+private fun VolumePanel(level: Float, onChange: (Float) -> Unit, onLeftAlone: () -> Unit, modifier: Modifier = Modifier) {
     val ink = LocalInk.current
-    var showLabel by remember { mutableStateOf(false) }
-    var first by remember { mutableStateOf(true) }
-    LaunchedEffect(mode) {
-        if (first) {
-            first = false
-            return@LaunchedEffect
-        }
-        showLabel = true
-        delay(1600)
-        showLabel = false
+    var touches by remember { mutableIntStateOf(0) }
+    val leftAlone by rememberUpdatedState(onLeftAlone)
+    LaunchedEffect(touches) {
+        delay(VOLUME_OPEN_MS)
+        leftAlone()
     }
-    Column(horizontalAlignment = Alignment.End) {
-        RoundIconButton("Sound: ${mode.label}. Tap to change.", onClick) { color ->
-            when (mode) {
-                SoundMode.AMBIENT -> Icons.ambient(this, color)
-                SoundMode.BELLS -> Icons.bells(this, color)
-                SoundMode.SILENT -> Icons.silent(this, color)
+    val shape = RoundedCornerShape(22.dp)
+    Row(
+        modifier
+            .clip(shape)
+            .background(ink.field)
+            .border(1.dp, ink.fieldBorder, shape)
+            .padding(horizontal = 14.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Canvas(Modifier.size(18.dp)) { Icons.quiet(this, ink.soft) }
+        VolumeSlider(
+            level,
+            onChange = {
+                touches++
+                onChange(it)
+            },
+            modifier = Modifier.padding(horizontal = 8.dp).width(180.dp),
+        )
+        Canvas(Modifier.size(18.dp)) { Icons.volume(this, ink.soft, 1f) }
+    }
+}
+
+/** A slider from 0 to 1: drag along it or tap where you want it; TalkBack can set it too. */
+@Composable
+private fun VolumeSlider(value: Float, onChange: (Float) -> Unit, modifier: Modifier = Modifier) {
+    val ink = LocalInk.current
+    val change by rememberUpdatedState(onChange)
+    val thumb = 9.dp
+    Box(
+        modifier
+            .height(40.dp)
+            .pointerInput(Unit) {
+                val r = thumb.toPx()
+                detectTapGestures { change(((it.x - r) / (size.width - 2 * r)).coerceIn(0f, 1f)) }
             }
-        }
-        AnimatedVisibility(visible = showLabel, enter = fadeIn(), exit = fadeOut()) {
-            BasicText(
-                mode.label,
-                Modifier
-                    .padding(top = 6.dp)
-                    .clip(CircleShape)
-                    .background(ink.glass)
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-                style = TextStyle(color = ink.deep, fontSize = 13.sp),
-            )
+            .pointerInput(Unit) {
+                val r = thumb.toPx()
+                fun at(x: Float) = ((x - r) / (size.width - 2 * r)).coerceIn(0f, 1f)
+                detectHorizontalDragGestures(onDragStart = { change(at(it.x)) }) { c, _ -> change(at(c.position.x)) }
+            }
+            .semantics {
+                contentDescription = "Volume"
+                progressBarRangeInfo = ProgressBarRangeInfo(value, 0f..1f)
+                setProgress { change(it.coerceIn(0f, 1f)); true }
+            },
+    ) {
+        Canvas(Modifier.matchParentSize()) {
+            val r = thumb.toPx()
+            val y = size.height / 2
+            val x = r + (size.width - 2 * r) * value
+            val track = 4.dp.toPx()
+            drawLine(ink.line.copy(alpha = 0.25f), Offset(r, y), Offset(size.width - r, y), track, StrokeCap.Round)
+            drawLine(ink.deep.copy(alpha = 0.85f), Offset(r, y), Offset(x, y), track, StrokeCap.Round)
+            drawCircle(ink.deep, r, Offset(x, y))
         }
     }
 }
