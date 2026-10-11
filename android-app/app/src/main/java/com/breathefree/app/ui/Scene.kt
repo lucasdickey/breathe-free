@@ -1,6 +1,8 @@
 package com.breathefree.app.ui
 
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -35,13 +37,21 @@ class SceneGeometry(val cx: Float, val cy: Float, val half: Float) {
     }
 }
 
-/** Orb colours, from empty lungs (low) to full (high). */
-class OrbColors(
+/**
+ * Orb colours, from empty lungs (low) to full (high), for one moment of the sky: each of the
+ * sky's keys has its own ([DaySky]), so the orb sits in the sky's light, cyan by night,
+ * peach at sunrise, gold at golden hour, mauve as the light goes.
+ */
+@Immutable
+data class OrbColors(
     val coreLow: Color,
     val coreHigh: Color,
     val edgeLow: Color,
     val edgeHigh: Color,
+    /** The light round the orb, and round the dot that travels the box. */
     val glow: Color,
+    /** How strongly the glow adds its light: fully on a dark sky, faintly where the sky is already bright. */
+    val shine: Float = 1f,
 ) {
     companion object {
         val Night = OrbColors(
@@ -52,7 +62,7 @@ class OrbColors(
         val Day = OrbColors(
             coreLow = Color(0xFFBDEFF8), coreHigh = Color(0xFFE6FBFE),
             edgeLow = Color(0xFF2B95C2), edgeHigh = Color(0xFF3FB8D9),
-            glow = Color(0xFF7FD6EE),
+            glow = Color(0xFF7FD6EE), shine = 0.15f,
         )
 
         fun between(a: OrbColors, b: OrbColors, t: Float) = OrbColors(
@@ -61,6 +71,7 @@ class OrbColors(
             edgeLow = lerp(a.edgeLow, b.edgeLow, t),
             edgeHigh = lerp(a.edgeHigh, b.edgeHigh, t),
             glow = lerp(a.glow, b.glow, t),
+            shine = a.shine + (b.shine - a.shine) * t,
         )
     }
 }
@@ -68,24 +79,33 @@ class OrbColors(
 /** How far from the middle the orb's brightest spot sits, as a fraction of its radius. */
 private const val LIGHT_REACH = 0.5f
 
+/** How far the glow reaches, as a multiple of the orb's radius. */
+private const val GLOW_REACH = 1.55f
+
 fun DrawScope.drawOrb(center: Offset, radius: Float, level: Float, colors: OrbColors, sun: Float, alpha: Float = 1f) {
     if (alpha <= 0f || radius <= 0f) return
-    // Halo: strongest at the rim, then fading over much the same width at every breath, so it
-    // stays close to the orb and leaves the clouds beyond the box alone.
-    val haloRadius = radius * (1.9f - 0.45f * level)
-    val haloAlpha = (0.26f + 0.22f * level) * alpha
-    val rim = (radius / haloRadius) * 0.92f
-    drawCircle(
-        brush = Brush.radialGradient(
-            0f to colors.glow.copy(alpha = haloAlpha),
-            rim to colors.glow.copy(alpha = haloAlpha),
-            1f to colors.glow.copy(alpha = 0f),
+    // Glow: light added round the orb in its own colour, falling away smoothly. Added, not
+    // painted over, so the clouds behind keep their contrast at every breath: a glow that
+    // veiled them as the lungs filled let them come back at the end of each cycle, which
+    // looked like the sky starting over. Faint where the sky is already bright.
+    val glowRadius = radius * GLOW_REACH
+    val strength = (0.20f + 0.08f * level) * colors.shine * alpha
+    if (strength > 0.002f) {
+        val edge = 1f / GLOW_REACH
+        // (1 - f)² from the orb's edge out, f going 0 to 1 across the glow.
+        fun at(f: Float) = (edge + (1f - edge) * f) to colors.glow.copy(alpha = strength * (1f - f) * (1f - f))
+        drawCircle(
+            brush = Brush.radialGradient(
+                0f to colors.glow.copy(alpha = strength),
+                at(0f), at(0.25f), at(0.5f), at(0.75f), at(1f),
+                center = center,
+                radius = glowRadius,
+            ),
+            radius = glowRadius,
             center = center,
-            radius = haloRadius,
-        ),
-        radius = haloRadius,
-        center = center,
-    )
+            blendMode = BlendMode.Plus,
+        )
+    }
     // Body: lit from where the sun is ([sun], an angle round the orb), so the light goes round
     // it through the day.
     val light = Offset(center.x + radius * LIGHT_REACH * cos(sun), center.y - radius * LIGHT_REACH * sin(sun))
