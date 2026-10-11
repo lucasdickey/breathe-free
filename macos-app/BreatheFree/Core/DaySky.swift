@@ -95,6 +95,31 @@ struct SkyPalette: Equatable {
     }
 }
 
+/// The orb's colours for one moment of the sky, from empty lungs (low) to full (high): each of
+/// the sky's keys has its own (`DaySky`), so the orb sits in the sky's light, cyan by night,
+/// peach at sunrise, gold at golden hour, mauve as the light goes.
+struct OrbColors: Equatable {
+    let coreLow: RGB
+    let coreHigh: RGB
+    let edgeLow: RGB
+    let edgeHigh: RGB
+    /// The light round the orb, and round the dot that travels the box.
+    let glow: RGB
+    /// How strongly the glow adds its light: fully on a dark sky, faintly where the sky is already bright.
+    var shine: Double = 1
+
+    static let night = OrbColors(coreLow: RGB(0x7CC9E6), coreHigh: RGB(0xC6F6FB),
+                                 edgeLow: RGB(0x1D6CA0), edgeHigh: RGB(0x39B6D8), glow: RGB(0x86E3F4))
+    static let day = OrbColors(coreLow: RGB(0xBDEFF8), coreHigh: RGB(0xE6FBFE),
+                               edgeLow: RGB(0x2B95C2), edgeHigh: RGB(0x3FB8D9), glow: RGB(0x7FD6EE), shine: 0.15)
+
+    func mix(_ o: OrbColors, _ t: Double) -> OrbColors {
+        OrbColors(coreLow: coreLow.blend(o.coreLow, t), coreHigh: coreHigh.blend(o.coreHigh, t),
+                  edgeLow: edgeLow.blend(o.edgeLow, t), edgeHigh: edgeHigh.blend(o.edgeHigh, t),
+                  glow: glow.blend(o.glow, t), shine: shine + (o.shine - shine) * t)
+    }
+}
+
 /// The sky for one moment of the day, and which way round the text goes on it.
 struct DayLook: Equatable {
     let sky: SkyPalette
@@ -105,6 +130,8 @@ struct DayLook: Equatable {
     let softness: Double
     /// Where the sun is, as an angle round the orb (`DaySky.sunAngle`): the side it is lit from.
     let sun: Double
+    /// The orb's colours for this sky (`DaySky.orb(atHour:rise:set:)`).
+    let orb: OrbColors
 }
 
 /// The sky follows the clock: night, blue hour, a hazy violet as the light turns, sunrise,
@@ -133,7 +160,8 @@ enum DaySky {
         let text = dark ? lightText : darkText
         let softness = min(max((worstContrast(text.soft, sky) - 2.6) / (3.4 - 2.6), 0), 1)
         let sun = sunAngle(atHour: hour, rise: rise, set: set, southern: isSouthern(zone))
-        return DayLook(sky: sky, dark: dark, softness: softness, sun: sun)
+        return DayLook(sky: sky, dark: dark, softness: softness, sun: sun,
+                       orb: orb(atHour: hour, rise: rise, set: set))
     }
 
     /// Sunrise and sunset on the day of `date`, in hours on the local clock.
@@ -177,19 +205,34 @@ enum DaySky {
 
     /// The sky `hour` hours after local midnight, on a day with the given sunrise and sunset.
     static func palette(atHour hour: Double, rise: Double, set: Double) -> SkyPalette {
+        guard let around = keysAround(hour, rise: rise, set: set) else { return night }
+        return around.0.sky.mix(around.1.sky, around.2)
+    }
+
+    /// The orb's colours at the same moment. Each of the sky's keys has its own, blended the
+    /// way the sky is, so the orb always sits in the sky's light: cyan by night, periwinkle at
+    /// blue hour, peach at sunrise, sky blue by day, gold at golden hour, coral at sunset, mauve
+    /// and violet as the light goes.
+    static func orb(atHour hour: Double, rise: Double, set: Double) -> OrbColors {
+        guard let around = keysAround(hour, rise: rise, set: set) else { return .night }
+        return around.0.orb.mix(around.1.orb, around.2)
+    }
+
+    /// The keys either side of `hour` and how far it is from one to the other, eased; nil at night.
+    private static func keysAround(_ hour: Double, rise: Double, set: Double) -> (Key, Key, Double)? {
         var previous = keys[0]
         var previousTime = previous.time(rise, set)
-        if hour < previousTime { return night }
+        if hour < previousTime { return nil }
         for key in keys.dropFirst() {
             let time = key.time(rise, set)
             if hour < time {
                 let x = (hour - previousTime) / (time - previousTime)
-                return previous.sky.mix(key.sky, x * x * (3 - 2 * x))
+                return (previous, key, x * x * (3 - 2 * x))
             }
             previous = key
             previousTime = time
         }
-        return night
+        return nil
     }
 
     /// The lowest contrast `ink` has against `sky` at the heights where text sits.
@@ -215,6 +258,7 @@ enum DaySky {
         let anchor: Anchor
         let hours: Double
         let sky: SkyPalette
+        let orb: OrbColors
 
         func time(_ rise: Double, _ set: Double) -> Double { (anchor == .sunrise ? rise : set) + hours }
     }
@@ -246,18 +290,36 @@ enum DaySky {
     private static let duskHaze = sky(0x64669A, 0x86749A, 0xA07E92, 0xD2B8CC, 0.35, stars: 0.05)
     private static let dusk = sky(0x1B2A56, 0x3B477C, 0x6E5A88, 0xA898C0, 0.26, stars: 0.4)
 
+    // The orb for each sky: core and edge with the lungs empty and full, the glow, and how
+    // strongly the glow shines. Kept in step with the Android app's DaySky.kt.
+    private static func orb(_ coreLow: UInt32, _ coreHigh: UInt32, _ edgeLow: UInt32, _ edgeHigh: UInt32,
+                            _ glow: UInt32, shine: Double) -> OrbColors {
+        OrbColors(coreLow: RGB(coreLow), coreHigh: RGB(coreHigh), edgeLow: RGB(edgeLow), edgeHigh: RGB(edgeHigh),
+                  glow: RGB(glow), shine: shine)
+    }
+
+    private static let blueHourOrb = orb(0xA6BFF1, 0xD5E2FF, 0x34509C, 0x5A7BD0, 0x9DB7F2, shine: 1)
+    private static let dawnHazeOrb = orb(0xC0B8E8, 0xE3DCFA, 0x6A63A6, 0x9890CF, 0xCDC4F2, shine: 0.85)
+    private static let sunriseOrb = orb(0xF4CDBF, 0xFFF0E6, 0xB8768E, 0xE09FA6, 0xFFD6C4, shine: 0.5)
+    private static let morningOrb = orb(0xC2E4F8, 0xF2FAFF, 0x3F86C0, 0x6EAEDF, 0xC6E6FA, shine: 0.18)
+    private static let afternoonOrb = orb(0xC6ECF6, 0xEEFBFD, 0x2F8FBF, 0x4FB3D6, 0x8AD6EC, shine: 0.15)
+    private static let goldenOrb = orb(0xF7DDB2, 0xFFF5E3, 0xC2843F, 0xE8B06A, 0xFFE1B2, shine: 0.35)
+    private static let sunsetOrb = orb(0xF6C4B4, 0xFFEDE5, 0xC06A6A, 0xE8958A, 0xFFCDBD, shine: 0.5)
+    private static let duskHazeOrb = orb(0xCDB2DC, 0xEEDDF5, 0x7A5A92, 0xA887C0, 0xD9C2E8, shine: 0.85)
+    private static let duskOrb = orb(0xBAB9F3, 0xE0DFFF, 0x46449A, 0x7470CC, 0xB2AFF4, shine: 1)
+
     private static let keys: [Key] = [
-        Key(anchor: .sunrise, hours: -1.5, sky: night),
-        Key(anchor: .sunrise, hours: -0.75, sky: blueHour),
-        Key(anchor: .sunrise, hours: -0.25, sky: dawnHaze),
-        Key(anchor: .sunrise, hours: 0.15, sky: sunrise),
-        Key(anchor: .sunrise, hours: 1.2, sky: morning),
-        Key(anchor: .sunrise, hours: 3.0, sky: day),
-        Key(anchor: .sunset, hours: -3.0, sky: afternoon),
-        Key(anchor: .sunset, hours: -0.9, sky: golden),
-        Key(anchor: .sunset, hours: 0.05, sky: sunset),
-        Key(anchor: .sunset, hours: 0.35, sky: duskHaze),
-        Key(anchor: .sunset, hours: 0.75, sky: dusk),
-        Key(anchor: .sunset, hours: 1.5, sky: night),
+        Key(anchor: .sunrise, hours: -1.5, sky: night, orb: .night),
+        Key(anchor: .sunrise, hours: -0.75, sky: blueHour, orb: blueHourOrb),
+        Key(anchor: .sunrise, hours: -0.25, sky: dawnHaze, orb: dawnHazeOrb),
+        Key(anchor: .sunrise, hours: 0.15, sky: sunrise, orb: sunriseOrb),
+        Key(anchor: .sunrise, hours: 1.2, sky: morning, orb: morningOrb),
+        Key(anchor: .sunrise, hours: 3.0, sky: day, orb: .day),
+        Key(anchor: .sunset, hours: -3.0, sky: afternoon, orb: afternoonOrb),
+        Key(anchor: .sunset, hours: -0.9, sky: golden, orb: goldenOrb),
+        Key(anchor: .sunset, hours: 0.05, sky: sunset, orb: sunsetOrb),
+        Key(anchor: .sunset, hours: 0.35, sky: duskHaze, orb: duskHazeOrb),
+        Key(anchor: .sunset, hours: 0.75, sky: dusk, orb: duskOrb),
+        Key(anchor: .sunset, hours: 1.5, sky: night, orb: .night),
     ]
 }

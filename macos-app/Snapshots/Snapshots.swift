@@ -95,5 +95,12 @@ struct Snapshots {
         shoot("4-hold-end-open-night", night, SessionView(model: model, session: session(at: 13.6), endOpen: true))
         shoot("6-done-night", night, DoneView(model: model))
         shoot("6-done-noon", noon, DoneView(model: model))
+        // The orb in each sky's own colours through the day, holding full and holding empty.
+        for (name, hour, minute) in [("1-first-light", 6, 50), ("2-sunrise", 7, 15), ("3-morning", 8, 30),
+                                     ("4-noon", 12, 30), ("5-golden", 17, 35), ("6-sunset", 18, 40),
+                                     ("7-last-light", 18, 58), ("8-dusk", 19, 25), ("9-night", 20, 49)] {
+            shoot("7-orb-\(name)-full", at(hour, minute), SessionView(model: model, session: session(at: 13.6)))
+            shoot("7-orb-\(name)-empty", at(hour, minute), SessionView(model: model, session: session(at: 21.6)))
+        }
     }
 }

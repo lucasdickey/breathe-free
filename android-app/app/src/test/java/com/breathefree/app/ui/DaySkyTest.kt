@@ -1,5 +1,6 @@
 package com.breathefree.app.ui
 
+import androidx.compose.ui.graphics.Color
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -83,6 +84,63 @@ class DaySkyTest {
                     }
                 }
                 previous = sky
+            }
+        }
+    }
+
+    @Test
+    fun theOrbNeverJumps() {
+        for (zone in listOf(losAngeles, sydney)) for (date in dates) {
+            var previous: OrbColors? = null
+            for (time in everyMinute(date, zone)) {
+                val orb = DaySky.at(time).orb
+                previous?.let { p ->
+                    for ((a, b) in listOf(
+                        p.coreLow to orb.coreLow, p.coreHigh to orb.coreHigh,
+                        p.edgeLow to orb.edgeLow, p.edgeHigh to orb.edgeHigh, p.glow to orb.glow,
+                    )) {
+                        val step = max(abs(a.red - b.red), max(abs(a.green - b.green), abs(a.blue - b.blue)))
+                        assertTrue("orb moved $step in a minute at $time", step < 0.05f)
+                    }
+                    assertTrue("glow strength moved in a minute at $time", abs(p.shine - orb.shine) < 0.05f)
+                }
+                previous = orb
+            }
+        }
+    }
+
+    @Test
+    fun theOrbTakesTheSkysColours() {
+        fun at(h: Int, m: Int) = DaySky.at(ZonedDateTime.of(2026, 10, 7, h, m, 0, 0, losAngeles)).orb
+        val night = at(23, 0)
+        assertEquals(OrbColors.Night, night)
+        // Violet at dusk, where the night's cyan would clash: more red, less green.
+        val dusk = at(19, 25)
+        assertTrue("dusk glow ${dusk.glow}", dusk.glow.red > night.glow.red + 0.1f && dusk.glow.green < night.glow.green)
+        // Warm at golden hour.
+        val golden = at(17, 35)
+        assertTrue("golden core ${golden.coreLow}", golden.coreLow.red > golden.coreLow.blue + 0.15f)
+        // Its glow shines fully on a dark sky and only faintly on a bright one.
+        assertEquals(1f, night.shine, 0f)
+        assertTrue("midday shine ${at(12, 47).shine}", at(12, 47).shine < 0.3f)
+    }
+
+    @Test
+    fun theCountStaysReadableOnTheOrb() {
+        // The count is dark navy at 80% over the orb's core, which sits under it.
+        val count = Color(0xFF0B3A55)
+        for (zone in listOf(losAngeles, sydney)) for (date in dates) {
+            for (time in everyMinute(date, zone)) {
+                val orb = DaySky.at(time).orb
+                for (core in listOf(orb.coreLow, orb.coreHigh)) {
+                    val shown = Color(
+                        core.red + (count.red - core.red) * 0.8f,
+                        core.green + (count.green - core.green) * 0.8f,
+                        core.blue + (count.blue - core.blue) * 0.8f,
+                    )
+                    val c = DaySky.contrast(shown, core)
+                    assertTrue("the count on the orb is $c:1 at $time", c >= 4.2f)
+                }
             }
         }
     }

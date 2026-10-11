@@ -92,6 +92,9 @@ struct Ink: Equatable {
     static func matching(_ look: DayLook) -> Ink {
         var ink = look.dark ? onDark : onLight
         ink.sun = look.sun
+        // The orb, and the glow round the dot on the box, take the sky's own colours.
+        ink.orb = look.orb
+        ink.dotGlow = Paint(rgb: look.orb.glow, opacity: 1)
         if look.softness < 1 { ink.soft = ink.deep.mix(ink.soft, look.softness) }
         return ink
     }
@@ -110,19 +113,6 @@ extension EnvironmentValues {
 }
 
 /// Orb colours, from empty lungs (low) to full (high).
-struct OrbColors: Equatable {
-    let coreLow: RGB
-    let coreHigh: RGB
-    let edgeLow: RGB
-    let edgeHigh: RGB
-    let glow: RGB
-
-    static let night = OrbColors(coreLow: RGB(0x7CC9E6), coreHigh: RGB(0xC6F6FB),
-                                 edgeLow: RGB(0x1D6CA0), edgeHigh: RGB(0x39B6D8), glow: RGB(0x86E3F4))
-    static let day = OrbColors(coreLow: RGB(0xBDEFF8), coreHigh: RGB(0xE6FBFE),
-                               edgeLow: RGB(0x2B95C2), edgeHigh: RGB(0x3FB8D9), glow: RGB(0x7FD6EE))
-}
-
 // MARK: - Sky and clouds
 
 /// The small seeded generator the web and Android versions use, so every platform draws the same sky.
@@ -342,25 +332,34 @@ enum SceneDrawing {
     /// How far from the middle the brightest spot sits, as a fraction of the radius.
     private static let lightReach = 0.5
 
+    /// How far the glow reaches, as a multiple of the orb's radius.
+    private static let glowReach = 1.55
+
     static func orb(_ context: inout GraphicsContext, center: CGPoint, radius: Double, level: Double,
                     colors: OrbColors, sun: Double, alpha: Double = 1) {
         guard alpha > 0, radius > 0 else { return }
-        // Halo: strongest at the rim, then fading over much the same width at every breath, so it
-        // stays close to the orb and leaves the clouds beyond the box alone.
-        let haloRadius = radius * (1.9 - 0.45 * level)
-        let haloAlpha = (0.26 + 0.22 * level) * alpha
-        let rim = (radius / haloRadius) * 0.92
-        context.fill(
-            Path(ellipseIn: circle(center, haloRadius)),
-            with: .radialGradient(
-                Gradient(stops: [
-                    .init(color: colors.glow.color(haloAlpha), location: 0),
-                    .init(color: colors.glow.color(haloAlpha), location: rim),
-                    .init(color: colors.glow.color(0), location: 1),
-                ]),
-                center: center, startRadius: 0, endRadius: haloRadius
+        // Glow: light added round the orb in its own colour, falling away smoothly. Added, not
+        // painted over, so the clouds behind keep their contrast at every breath: a glow that
+        // veiled them as the lungs filled let them come back at the end of each cycle, which
+        // looked like the sky starting over. Faint where the sky is already bright.
+        let glowRadius = radius * glowReach
+        let strength = (0.20 + 0.08 * level) * colors.shine * alpha
+        if strength > 0.002 {
+            let edge = 1 / glowReach
+            // (1 - f)² from the orb's edge out, f going 0 to 1 across the glow.
+            let falloff = [0, 0.25, 0.5, 0.75, 1].map { f in
+                Gradient.Stop(color: colors.glow.color(strength * (1 - f) * (1 - f)), location: edge + (1 - edge) * f)
+            }
+            var light = context
+            light.blendMode = .plusLighter
+            light.fill(
+                Path(ellipseIn: circle(center, glowRadius)),
+                with: .radialGradient(
+                    Gradient(stops: [Gradient.Stop(color: colors.glow.color(strength), location: 0)] + falloff),
+                    center: center, startRadius: 0, endRadius: glowRadius
+                )
             )
-        )
+        }
         // Body: lit from where the sun is (`sun`, an angle round the orb), so the light goes
         // round it through the day.
         let light = CGPoint(x: center.x + radius * lightReach * cos(sun),

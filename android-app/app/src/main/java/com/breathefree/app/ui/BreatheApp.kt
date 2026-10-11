@@ -135,8 +135,10 @@ fun BreatheApp(controller: BreatheController, clock: () -> ZonedDateTime = { Zon
 
     // Text and controls turn light when the sky turns dark, easing across over a second.
     val darkness by animateFloatAsState(if (look.dark) 1f else 0f, tween(1200), label = "ink")
-    val ink = remember(darkness, look.softness, look.sun) {
-        Ink.between(Ink.OnLight, Ink.OnDark, darkness).softened(look.softness).copy(sun = look.sun.toFloat())
+    // The orb, and the glow round the dot on the box, take the sky's own colours (DaySky.orbAt).
+    val ink = remember(darkness, look.softness, look.sun, look.orb) {
+        Ink.between(Ink.OnLight, Ink.OnDark, darkness).softened(look.softness)
+            .copy(sun = look.sun.toFloat(), orb = look.orb, dotGlow = look.orb.glow)
     }
 
     LaunchedEffect(look.dark) {

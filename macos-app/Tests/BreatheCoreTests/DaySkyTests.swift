@@ -81,6 +81,60 @@ final class DaySkyTests: XCTestCase {
         }
     }
 
+    func testTheOrbNeverJumps() {
+        for zone in [losAngeles, sydney] {
+            for (y, m, d) in dates {
+                var previous: OrbColors?
+                for time in everyMinute(y, m, d, in: zone) {
+                    let orb = DaySky.look(at: time, in: zone).orb
+                    if let p = previous {
+                        for (a, b) in [(p.coreLow, orb.coreLow), (p.coreHigh, orb.coreHigh), (p.edgeLow, orb.edgeLow),
+                                       (p.edgeHigh, orb.edgeHigh), (p.glow, orb.glow)] {
+                            let step = max(abs(a.r - b.r), abs(a.g - b.g), abs(a.b - b.b))
+                            XCTAssertLessThan(step, 0.05, "orb jumped at \(time) in \(zone.identifier)")
+                        }
+                        XCTAssertLessThan(abs(p.shine - orb.shine), 0.05, "glow strength jumped at \(time)")
+                    }
+                    previous = orb
+                }
+            }
+        }
+    }
+
+    func testTheOrbTakesTheSkysColours() {
+        func at(_ hour: Int, _ minute: Int) -> OrbColors {
+            DaySky.look(at: date(2026, 10, 7, hour, minute, in: losAngeles), in: losAngeles).orb
+        }
+        let night = at(23, 0)
+        XCTAssertEqual(night, .night)
+        // Violet at dusk, where the night's cyan would clash: more red, less green.
+        let dusk = at(19, 25)
+        XCTAssertGreaterThan(dusk.glow.r, night.glow.r + 0.1)
+        XCTAssertLessThan(dusk.glow.g, night.glow.g)
+        // Warm at golden hour.
+        let golden = at(17, 35)
+        XCTAssertGreaterThan(golden.coreLow.r, golden.coreLow.b + 0.15)
+        // The glow shines fully on a dark sky and only faintly on a bright one.
+        XCTAssertEqual(night.shine, 1)
+        XCTAssertLessThan(at(12, 47).shine, 0.3)
+    }
+
+    func testTheCountStaysReadableOnTheOrb() {
+        // The count is dark navy at 80% over the orb's core, which sits under it.
+        let count = RGB(0x0B3A55)
+        for zone in [losAngeles, sydney] {
+            for (y, m, d) in dates {
+                for time in everyMinute(y, m, d, in: zone) {
+                    let orb = DaySky.look(at: time, in: zone).orb
+                    for core in [orb.coreLow, orb.coreHigh] {
+                        let c = DaySky.contrast(core.mix(count, 0.8), core)
+                        XCTAssertGreaterThanOrEqual(c, 4.2, "the count on the orb at \(time) in \(zone.identifier)")
+                    }
+                }
+            }
+        }
+    }
+
     func testTextSwitchesAroundSunriseAndSunset() {
         // On 7 October in Los Angeles (sunrise about 7:04, sunset about 6:29 pm): dark text
         // from shortly before sunrise, light text again shortly after sunset.

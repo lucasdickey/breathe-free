@@ -27,6 +27,8 @@ data class DayLook(
     val softness: Float,
     /** Where the sun is, as an angle round the orb ([DaySky.sunAngle]): the side it is lit from. */
     val sun: Double,
+    /** The orb's colours for this sky ([DaySky.orbAt]). */
+    val orb: OrbColors = OrbColors.Night,
 )
 
 /**
@@ -53,7 +55,7 @@ object DaySky {
         val dark = worstContrast(Ink.OnDark.deep, sky) > worstContrast(Ink.OnLight.deep, sky)
         val ink = if (dark) Ink.OnDark else Ink.OnLight
         val softness = ((worstContrast(ink.soft, sky) - 2.6f) / (3.4f - 2.6f)).coerceIn(0f, 1f)
-        return DayLook(sky, dark, softness, sunAngle(hour, rise, set, isSouthern(time.zone)))
+        return DayLook(sky, dark, softness, sunAngle(hour, rise, set, isSouthern(time.zone)), orbAt(hour, rise, set))
     }
 
     /** Sunrise and sunset on [date], in hours on the local clock. */
@@ -93,20 +95,33 @@ object DaySky {
     fun isSouthern(zone: ZoneId): Boolean = SOUTHERN_ZONES.any { zone.id.startsWith(it) }
 
     /** The sky [hour] hours after local midnight, on a day with the given sunrise and sunset. */
-    fun paletteAt(hour: Double, rise: Double, set: Double): SkyPalette {
+    fun paletteAt(hour: Double, rise: Double, set: Double): SkyPalette =
+        between(hour, rise, set)?.let { (a, b, t) -> a.sky.mix(b.sky, t) } ?: NIGHT
+
+    /**
+     * The orb's colours at the same moment. Each of the sky's keys has its own, blended the way
+     * the sky is, so the orb always sits in the sky's light: cyan by night, periwinkle at blue
+     * hour, peach at sunrise, sky blue by day, gold at golden hour, coral at sunset, mauve and
+     * violet as the light goes.
+     */
+    fun orbAt(hour: Double, rise: Double, set: Double): OrbColors =
+        between(hour, rise, set)?.let { (a, b, t) -> OrbColors.between(a.orb, b.orb, t) } ?: OrbColors.Night
+
+    /** The keys either side of [hour] and how far it is from one to the other, eased; null at night. */
+    private fun between(hour: Double, rise: Double, set: Double): Triple<Key, Key, Float>? {
         var previous = KEYS.first()
         var previousTime = previous.time(rise, set)
-        if (hour < previousTime) return NIGHT
+        if (hour < previousTime) return null
         for (key in KEYS.drop(1)) {
             val time = key.time(rise, set)
             if (hour < time) {
                 val x = ((hour - previousTime) / (time - previousTime)).toFloat()
-                return previous.sky.mix(key.sky, x * x * (3 - 2 * x))
+                return Triple(previous, key, x * x * (3 - 2 * x))
             }
             previous = key
             previousTime = time
         }
-        return NIGHT
+        return null
     }
 
     /** The lowest contrast [ink] has against [sky] at the heights where text sits. */
@@ -125,7 +140,7 @@ object DaySky {
 
     private enum class Anchor { SUNRISE, SUNSET }
 
-    private class Key(val anchor: Anchor, val hours: Double, val sky: SkyPalette) {
+    private class Key(val anchor: Anchor, val hours: Double, val sky: SkyPalette, val orb: OrbColors) {
         fun time(rise: Double, set: Double) = (if (anchor == Anchor.SUNRISE) rise else set) + hours
     }
 
@@ -154,18 +169,33 @@ object DaySky {
     private val DUSK_HAZE = sky(0xFF64669A, 0xFF86749A, 0xFFA07E92, 0xFFD2B8CC, 0.35f, stars = 0.05f)
     private val DUSK = sky(0xFF1B2A56, 0xFF3B477C, 0xFF6E5A88, 0xFFA898C0, 0.26f, stars = 0.4f)
 
+    // The orb for each sky: core and edge with the lungs empty and full, the glow, and how
+    // strongly the glow shines. Kept in step with the Mac app's DaySky.swift.
+    private fun orb(coreLow: Long, coreHigh: Long, edgeLow: Long, edgeHigh: Long, glow: Long, shine: Float) =
+        OrbColors(Color(coreLow), Color(coreHigh), Color(edgeLow), Color(edgeHigh), Color(glow), shine)
+
+    private val BLUE_HOUR_ORB = orb(0xFFA6BFF1, 0xFFD5E2FF, 0xFF34509C, 0xFF5A7BD0, 0xFF9DB7F2, 1f)
+    private val DAWN_HAZE_ORB = orb(0xFFC0B8E8, 0xFFE3DCFA, 0xFF6A63A6, 0xFF9890CF, 0xFFCDC4F2, 0.85f)
+    private val SUNRISE_ORB = orb(0xFFF4CDBF, 0xFFFFF0E6, 0xFFB8768E, 0xFFE09FA6, 0xFFFFD6C4, 0.5f)
+    private val MORNING_ORB = orb(0xFFC2E4F8, 0xFFF2FAFF, 0xFF3F86C0, 0xFF6EAEDF, 0xFFC6E6FA, 0.18f)
+    private val AFTERNOON_ORB = orb(0xFFC6ECF6, 0xFFEEFBFD, 0xFF2F8FBF, 0xFF4FB3D6, 0xFF8AD6EC, 0.15f)
+    private val GOLDEN_ORB = orb(0xFFF7DDB2, 0xFFFFF5E3, 0xFFC2843F, 0xFFE8B06A, 0xFFFFE1B2, 0.35f)
+    private val SUNSET_ORB = orb(0xFFF6C4B4, 0xFFFFEDE5, 0xFFC06A6A, 0xFFE8958A, 0xFFFFCDBD, 0.5f)
+    private val DUSK_HAZE_ORB = orb(0xFFCDB2DC, 0xFFEEDDF5, 0xFF7A5A92, 0xFFA887C0, 0xFFD9C2E8, 0.85f)
+    private val DUSK_ORB = orb(0xFFBAB9F3, 0xFFE0DFFF, 0xFF46449A, 0xFF7470CC, 0xFFB2AFF4, 1f)
+
     private val KEYS = listOf(
-        Key(Anchor.SUNRISE, -1.5, NIGHT),
-        Key(Anchor.SUNRISE, -0.75, BLUE_HOUR),
-        Key(Anchor.SUNRISE, -0.25, DAWN_HAZE),
-        Key(Anchor.SUNRISE, 0.15, SUNRISE),
-        Key(Anchor.SUNRISE, 1.2, MORNING),
-        Key(Anchor.SUNRISE, 3.0, DAY),
-        Key(Anchor.SUNSET, -3.0, AFTERNOON),
-        Key(Anchor.SUNSET, -0.9, GOLDEN),
-        Key(Anchor.SUNSET, 0.05, SUNSET),
-        Key(Anchor.SUNSET, 0.35, DUSK_HAZE),
-        Key(Anchor.SUNSET, 0.75, DUSK),
-        Key(Anchor.SUNSET, 1.5, NIGHT),
+        Key(Anchor.SUNRISE, -1.5, NIGHT, OrbColors.Night),
+        Key(Anchor.SUNRISE, -0.75, BLUE_HOUR, BLUE_HOUR_ORB),
+        Key(Anchor.SUNRISE, -0.25, DAWN_HAZE, DAWN_HAZE_ORB),
+        Key(Anchor.SUNRISE, 0.15, SUNRISE, SUNRISE_ORB),
+        Key(Anchor.SUNRISE, 1.2, MORNING, MORNING_ORB),
+        Key(Anchor.SUNRISE, 3.0, DAY, OrbColors.Day),
+        Key(Anchor.SUNSET, -3.0, AFTERNOON, AFTERNOON_ORB),
+        Key(Anchor.SUNSET, -0.9, GOLDEN, GOLDEN_ORB),
+        Key(Anchor.SUNSET, 0.05, SUNSET, SUNSET_ORB),
+        Key(Anchor.SUNSET, 0.35, DUSK_HAZE, DUSK_HAZE_ORB),
+        Key(Anchor.SUNSET, 0.75, DUSK, DUSK_ORB),
+        Key(Anchor.SUNSET, 1.5, NIGHT, OrbColors.Night),
     )
 }
