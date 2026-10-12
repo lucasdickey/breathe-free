@@ -21,8 +21,8 @@ hold for four, with an eight-second settle at the start.
   - soft filtered "air" that only moves while breath moves,
   - a gentle bell exactly on each change: A for breathe in, D for breathe out,
     quieter high and low notes for the holds.
-- **Sound modes**: Ambient, Bells only, or Silent, plus a volume slider. The speaker
-  button in a session switches mode without stopping.
+- **Sound modes**: Ambient, Bells only, or Silent, chosen before a session, plus a
+  volume slider. In a session, the speaker sets how loud it is.
 - The Force Touch trackpad taps at each change if a finger is resting on it.
 
 Keys: **Return** begins, **Space** pauses, and **Escape** pressed twice ends a session (the

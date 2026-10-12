@@ -106,11 +106,6 @@ final class SessionAudio {
         engine.stop()
     }
 
-    var mode: SoundMode {
-        get { synth.mode }
-        set { synth.mode = newValue }
-    }
-
     var volume: Double {
         get { synth.volume }
         set { synth.volume = newValue }

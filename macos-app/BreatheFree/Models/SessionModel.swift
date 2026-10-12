@@ -30,8 +30,6 @@ final class SessionModel: ObservableObject {
 
     @Published private(set) var screen: Screen = .home
     @Published private(set) var session: ActiveSession?
-    /// The sound for the session on screen; can change mid-session without changing the saved choice.
-    @Published private(set) var sessionSound: SoundMode = .ambient
 
     private let defaults = UserDefaults.standard
     private var audio: SessionAudio?
@@ -51,7 +49,6 @@ final class SessionModel: ObservableObject {
         // A short lead so the first frame and the first sample both land after "now".
         let active = ActiveSession(plan: SessionPlan(cycles: cycles), startTime: CACurrentMediaTime() + 0.35)
         session = active
-        sessionSound = soundMode
         lastPhaseIndex = Int.min
         screen = .session
         startAudio(for: active, mode: soundMode)
@@ -72,32 +69,12 @@ final class SessionModel: ObservableObject {
         guard let active = session, active.isPaused else { return }
         let resumed = active.resumed(at: CACurrentMediaTime())
         session = resumed
-        startAudio(for: resumed, mode: sessionSound)
+        startAudio(for: resumed, mode: soundMode)
     }
 
     /// The pause button and the space bar.
     func togglePause() {
         if isPaused { resume() } else { pause() }
-    }
-
-    /// The sound button during a session: ambient → bells only → silent → ambient. While
-    /// paused it only changes the choice; the sound starts in that mode on resume.
-    func nextSessionSound() {
-        guard let active = session else { return }
-        let next: SoundMode
-        switch sessionSound {
-        case .ambient: next = .bells
-        case .bells: next = .silent
-        case .silent: next = .ambient
-        }
-        sessionSound = next
-        if next == .silent {
-            stopAudio()
-        } else if let audio {
-            audio.mode = next
-        } else if !active.isPaused {
-            startAudio(for: active, mode: next)
-        }
     }
 
     /// Leave a session early (close button or Escape).

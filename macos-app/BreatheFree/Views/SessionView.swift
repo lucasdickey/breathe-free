@@ -110,9 +110,6 @@ struct SessionView: View {
                             label: session.isPaused ? "Resume session" : "Pause session",
                             action: model.togglePause)
                 .keyboardShortcut(.space, modifiers: [])
-            RoundIconButton(systemImage: soundSymbol, label: "Sound: \(model.sessionSound.label). Click to change.") {
-                model.nextSessionSound()
-            }
             RoundIconButton(systemImage: volumeSymbol, label: "Volume") { showVolume.toggle() }
                 .popover(isPresented: $showVolume, arrowEdge: .bottom) {
                     HStack(spacing: 10) {
@@ -126,16 +123,6 @@ struct SessionView: View {
         }
         .padding(.top, 14)
         .padding(.horizontal, 16)
-    }
-
-    /// Which sound is playing. Ambient is a wave rather than a speaker, so it isn't taken for
-    /// the volume button beside it.
-    private var soundSymbol: String {
-        switch model.sessionSound {
-        case .ambient: return "waveform"
-        case .bells: return "bell.fill"
-        case .silent: return "speaker.slash.fill"
-        }
     }
 
     /// The volume button shows how loud it is, as the menu bar's speaker does.
