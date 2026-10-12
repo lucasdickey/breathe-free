@@ -502,26 +502,32 @@ object Icons {
         line(color, 18f, 6f, 6f, 18f)
     }
 
-    fun ambient(scope: DrawScope, color: Color) = with(scope) {
+    /**
+     * The volume button: a speaker with one, two or three waves for how loud [level] (0 to 1)
+     * is, as the Mac's menu bar shows it, and crossed out at nothing.
+     */
+    fun volume(scope: DrawScope, color: Color, level: Float) = with(scope) {
+        if (level < 0.01f) return silent(this, color)
         speaker(color)
         val k = u()
-        drawArc(color, -50f, 100f, false, Offset(10f * k, 8f * k), androidx.compose.ui.geometry.Size(6f * k, 8f * k), style = Stroke(2f * k, cap = StrokeCap.Round))
-        drawArc(color, -50f, 100f, false, Offset(10f * k, 4.5f * k), androidx.compose.ui.geometry.Size(11f * k, 15f * k), style = Stroke(2f * k, cap = StrokeCap.Round))
+        val waves = when {
+            level < 0.34f -> 1
+            level < 0.67f -> 2
+            else -> 3
+        }
+        for (i in 1..waves) {
+            val r = 3f * i
+            drawArc(
+                color, -45f, 90f, false,
+                Offset((12.5f - r) * k, (12f - r) * k),
+                androidx.compose.ui.geometry.Size(2 * r * k, 2 * r * k),
+                style = Stroke(2f * k, cap = StrokeCap.Round),
+            )
+        }
     }
 
-    fun bells(scope: DrawScope, color: Color) = with(scope) {
-        val k = u()
-        val p = Path().apply {
-            moveTo(6f * k, 17f * k)
-            cubicTo(7.5f * k, 15f * k, 7f * k, 13f * k, 7f * k, 10.5f * k)
-            cubicTo(7f * k, 7.5f * k, 9.2f * k, 5f * k, 12f * k, 5f * k)
-            cubicTo(14.8f * k, 5f * k, 17f * k, 7.5f * k, 17f * k, 10.5f * k)
-            cubicTo(17f * k, 13f * k, 16.5f * k, 15f * k, 18f * k, 17f * k)
-            close()
-        }
-        drawPath(p, color, style = Stroke(width = 2f * k, join = StrokeJoin.Round))
-        line(color, 10f, 20f, 14f, 20f)
-    }
+    /** The quiet end of the volume slider: a speaker with no waves. */
+    fun quiet(scope: DrawScope, color: Color) = with(scope) { speaker(color) }
 
     fun silent(scope: DrawScope, color: Color) = with(scope) {
         speaker(color)

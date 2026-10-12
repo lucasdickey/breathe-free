@@ -25,23 +25,28 @@ import kotlin.math.max
  * headphones that lag by a fifth of a second.
  *
  * Because it lines itself up with a clock it doesn't own, it can also be started part way
- * through a session (sound switched back on) and still land on the beat.
+ * through a session (on carrying on after a pause) and still land on the beat.
  */
 class SessionAudio(
     plan: SessionPlan,
     private val startNanos: Long,
     mode: SoundMode,
+    volume: Double = 1.0,
 ) {
     private val sampleRate = nativeSampleRate()
-    private val synth = BreathSynth(sampleRate, plan).also { it.mode = mode }
+    private val synth = BreathSynth(sampleRate, plan).also {
+        it.mode = mode
+        it.volume = volume
+    }
 
     @Volatile private var running = true
     private val thread = Thread(::run, "breath-audio")
 
     fun start() = thread.start()
 
-    fun setMode(mode: SoundMode) {
-        synth.mode = mode
+    /** How loud, 0 to 1. The synth glides to it, so moving the slider doesn't click. */
+    fun setVolume(volume: Double) {
+        synth.volume = volume
     }
 
     /** Fade out over a third of a second, then let go of the speaker. Returns at once. */

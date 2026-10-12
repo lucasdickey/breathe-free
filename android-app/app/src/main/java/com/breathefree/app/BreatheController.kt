@@ -2,6 +2,7 @@ package com.breathefree.app
 
 import android.content.Context
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -58,14 +59,14 @@ class BreatheController(context: Context, private val nanoTime: () -> Long = Sys
     var hapticsOn by mutableStateOf(prefs.getBoolean(KEY_HAPTICS, true))
         private set
 
+    /** How loud the sound is, 0 to 1, set with the speaker during a session. */
+    var volume by mutableFloatStateOf(prefs.getFloat(KEY_VOLUME, DEFAULT_VOLUME).coerceIn(0f, 1f))
+        private set
+
     var screen by mutableStateOf(Screen.HOME)
         private set
 
     var session by mutableStateOf<ActiveSession?>(null)
-        private set
-
-    /** The sound for the session on screen; can be changed mid-session without changing the saved choice. */
-    var sessionSound by mutableStateOf(soundMode)
         private set
 
     private var audio: SessionAudio? = null
@@ -86,13 +87,20 @@ class BreatheController(context: Context, private val nanoTime: () -> Long = Sys
         prefs.edit().putBoolean(KEY_HAPTICS, on).apply()
     }
 
+    /** Set from the volume slider; the sound playing follows at once, and it is kept for next time. */
+    fun chooseVolume(level: Float) {
+        val v = level.coerceIn(0f, 1f)
+        volume = v
+        prefs.edit().putFloat(KEY_VOLUME, v).apply()
+        audio?.setVolume(v.toDouble())
+    }
+
     fun begin() {
         stopAudio()
         val plan = SessionPlan(cycles)
         // A short lead so the first frame and the first sample both land after "now".
         val active = ActiveSession(plan, nanoTime() + LEAD_NANOS)
         session = active
-        sessionSound = soundMode
         lastPhaseIndex = NO_PHASE
         screen = Screen.SESSION
         startAudio(active, soundMode)
@@ -127,32 +135,12 @@ class BreatheController(context: Context, private val nanoTime: () -> Long = Sys
         if (!active.isPaused) return
         val resumed = active.resumedAt(nanoTime())
         session = resumed
-        startAudio(resumed, sessionSound)
+        startAudio(resumed, soundMode)
     }
 
     /** The pause button. */
     fun togglePause() {
         if (isPaused) resume() else pause()
-    }
-
-    /**
-     * The speaker button during a session: ambient → bells only → silent → ambient. While paused
-     * it only changes the choice; the sound starts in that mode on resume.
-     */
-    fun nextSessionSound() {
-        val active = session ?: return
-        val next = when (sessionSound) {
-            SoundMode.AMBIENT -> SoundMode.BELLS
-            SoundMode.BELLS -> SoundMode.SILENT
-            SoundMode.SILENT -> SoundMode.AMBIENT
-        }
-        sessionSound = next
-        val running = audio
-        when {
-            next == SoundMode.SILENT -> stopAudio()
-            running != null -> running.setMode(next)
-            !active.isPaused -> startAudio(active, next)
-        }
     }
 
     /** Leave a session early (close button or back). */
@@ -175,7 +163,7 @@ class BreatheController(context: Context, private val nanoTime: () -> Long = Sys
 
     private fun startAudio(active: ActiveSession, mode: SoundMode) {
         if (mode == SoundMode.SILENT) return
-        audio = SessionAudio(active.plan, active.startNanos, mode).also { it.start() }
+        audio = SessionAudio(active.plan, active.startNanos, mode, volume.toDouble()).also { it.start() }
     }
 
     private fun stopAudio() {
@@ -187,6 +175,8 @@ class BreatheController(context: Context, private val nanoTime: () -> Long = Sys
         const val KEY_CYCLES = "cycles"
         const val KEY_SOUND = "sound"
         const val KEY_HAPTICS = "haptics"
+        const val KEY_VOLUME = "volume"
+        const val DEFAULT_VOLUME = 1f // as loud as it played before it had a slider
         const val LEAD_NANOS = 350_000_000L
         const val NO_PHASE = Int.MIN_VALUE
     }
