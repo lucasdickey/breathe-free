@@ -335,9 +335,10 @@ class Phone:
 # ------------------------------------------------------------------ Mac: a window and a pointer
 
 class MacHome:
-    """Where things are on the Mac home screen, measured from its frames, and the one thing the
-    still renderer can't show: the volume slider, an AppKit control it leaves a placeholder for.
-    (Session length's motion it draws itself, from the moments in the script.)"""
+    """Where things are on the Mac home screen, measured from its frames, and what the still
+    renderer can't show: its AppKit controls, the tone's and the voice's volume sliders and the
+    Voice guidance switch, which it leaves a yellow placeholder for each. (Session length's
+    motion it draws itself, from the moments in the script.)"""
 
     def __init__(self, load):
         closed = np.asarray(load(frame_index_before(TAPS["open"]) - 3), dtype=np.int32)
@@ -366,36 +367,77 @@ class MacHome:
             "pick": (self.cx + self.slot(self.picked), self.cy),
             "begin": begin,
         }
+        # Each placeholder on its own: a slider is long and low, the switch about twice as wide as
+        # it is tall. A placeholder is yellow only where its row is drawn in full: the voice's
+        # slider is dimmed while the voice is off, and the promo has it on.
         yellow = (closed[:, :, 0] > 200) & (closed[:, :, 1] > 150) & (closed[:, :, 2] < 110)
-        ys, xs = np.nonzero(yellow)
-        self.slider = (xs.min() - 2, ys.min() - 2, xs.max() + 3, ys.max() + 3) if len(xs) else None
+        self.sliders, self.switches = [], []
+        for y0, y1 in runs(yellow.any(axis=1)):
+            for x0, x1 in runs(yellow[y0:y1].any(axis=0)):
+                if x1 - x0 < 8 * self.pt or y1 - y0 < 8 * self.pt:
+                    continue  # a yellow fleck of the sky, not a control
+                box = (x0 - 2, y0 - 2, x1 + 2, y1 + 2)
+                (self.sliders if x1 - x0 > 4 * (y1 - y0) else self.switches).append(box)
+        if len(self.sliders) != 2 or len(self.switches) != 1:
+            sys.exit(f"expected two sliders and the voice switch on the Mac home screen, found "
+                     f"{len(self.sliders)} and {len(self.switches)} (is the promo's voice on?)")
         self.begin_probe = (int(begin[0] + 100 * self.pt), int(begin[1]))
 
     def slot(self, i):
         return (i - (len(CHOICES) - 1) / 2) * self.step
 
-    def fix_slider(self, frame):
-        """Paints the volume slider where its placeholder is: the sky behind it, a track, the
-        level filled to the app's default of 0.85 and a knob."""
-        if not self.slider:
-            return frame
-        x0, y0, x1, y1 = self.slider
+    def fix_controls(self, frame):
+        """Paints each control where its placeholder is, over the sky behind it: the sliders as
+        a track filled to the app's default of 0.85 with a knob, and the switch on, as the
+        promo has the voice."""
         a = np.asarray(frame, dtype=np.float32).copy()
-        t = np.linspace(0, 1, y1 - y0)[:, None, None]
-        a[y0:y1, x0:x1] = a[y0 - 3, x0:x1][None] * (1 - t) + a[y1 + 3, x0:x1][None] * t
+        for x0, y0, x1, y1 in self.sliders:
+            # Between the speaker icons, so from the sky above and below it only.
+            t = np.linspace(0, 1, y1 - y0)[:, None, None]
+            a[y0:y1, x0:x1] = a[y0 - 3, x0:x1][None] * (1 - t) + a[y1 + 3, x0:x1][None] * t
+        for x0, y0, x1, y1 in self.switches:
+            # From the sky all round it, from a little further out at the sides, where the JPEG
+            # leaves a faint smudge for 10 pixels or so beside the yellow.
+            self.sky_behind(a, (x0 - 10, y0 - 2, x1 + 10, y1 + 2))
         img = Image.fromarray(a.clip(0, 255).astype(np.uint8))
         night = min(frame.getpixel(self.begin_probe)) > 200  # Begin is white on a night sky
         d = ImageDraw.Draw(img, "RGBA")
-        s, cy = self.pt, (y0 + y1) / 2
-        left, right = x0 + 6 * s, x1 - 6 * s
-        knob = left + (right - left) * 0.85
-        d.rounded_rectangle([left, cy - 2 * s, right, cy + 2 * s], 2 * s,
-                            fill=(255, 255, 255, 70) if night else (15, 42, 67, 46))
-        d.rounded_rectangle([left, cy - 2 * s, knob, cy + 2 * s], 2 * s, fill=(10, 132, 255, 255))
-        r = 9 * s
-        d.ellipse([knob - r, cy - r + 1.5, knob + r, cy + r + 1.5], fill=(0, 0, 0, 55))
-        d.ellipse([knob - r, cy - r, knob + r, cy + r], fill=(255, 255, 255, 255), outline=(0, 0, 0, 38))
+        s = self.pt
+        for x0, y0, x1, y1 in self.sliders:
+            cy = (y0 + y1) / 2
+            left, right = x0 + 6 * s, x1 - 6 * s
+            knob = left + (right - left) * 0.85
+            d.rounded_rectangle([left, cy - 2 * s, right, cy + 2 * s], 2 * s,
+                                fill=(255, 255, 255, 70) if night else (15, 42, 67, 46))
+            d.rounded_rectangle([left, cy - 2 * s, knob, cy + 2 * s], 2 * s, fill=(10, 132, 255, 255))
+            self.knob(d, knob, cy, 9 * s)
+        for x0, y0, x1, y1 in self.switches:
+            # Against the right edge of its row, like the sliders' louder end, in the sliders' blue.
+            cy, h = (y0 + y1) / 2, 22 * s
+            right = x1 - 2
+            left = right - 38 * s
+            d.rounded_rectangle([left, cy - h / 2, right, cy + h / 2], h / 2, fill=(10, 132, 255, 255))
+            self.knob(d, right - h / 2, cy, h / 2 - 1.5 * s)
         return img
+
+    @staticmethod
+    def sky_behind(a, box):
+        """Fills a box with the sky just outside it, blended in from all four sides so that it
+        meets the sky at every edge, clouds and all."""
+        x0, y0, x1, y1 = box
+        top, bottom, left, right = y0 - 3, y1 + 3, x0 - 3, x1 + 3
+        t = np.linspace(0, 1, y1 - y0)[:, None, None]
+        u = np.linspace(0, 1, x1 - x0)[None, :, None]
+        corners = ((1 - t) * ((1 - u) * a[top, left] + u * a[top, right])
+                   + t * ((1 - u) * a[bottom, left] + u * a[bottom, right]))
+        a[y0:y1, x0:x1] = ((1 - t) * a[top, x0:x1][None] + t * a[bottom, x0:x1][None]
+                           + (1 - u) * a[y0:y1, left][:, None] + u * a[y0:y1, right][:, None] - corners)
+
+    @staticmethod
+    def knob(d, x, y, r):
+        """A white knob with a soft shadow under it, as on the sliders."""
+        d.ellipse([x - r, y - r + 1.5, x + r, y + r + 1.5], fill=(0, 0, 0, 55))
+        d.ellipse([x - r, y - r, x + r, y + r], fill=(255, 255, 255, 255), outline=(0, 0, 0, 38))
 
 class MacWindow:
     """A Mac window around the app's frames: rounded, shadowed, with its three buttons. Built
@@ -584,7 +626,7 @@ class Edit:
         if k not in self.cache:
             img = self.load(k)
             if self.home and k / FPS < TAPS["begin"]:
-                img = self.home.fix_slider(img)
+                img = self.home.fix_controls(img)
             if len(self.cache) > 8:
                 self.cache.clear()
             self.cache[k] = img

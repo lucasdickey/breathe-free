@@ -78,10 +78,13 @@ class PromoTest {
 
         val context = ApplicationProvider.getApplicationContext<Context>()
         compose.mainClock.autoAdvance = false
-        val controller = BreatheController(context) { compose.mainClock.currentTime * 1_000_000L }
+        // No prompts to decode: the frames are silent, and the sound is PromoAudioTest's.
+        val controller = BreatheController(context, loadVoice = { null }) { compose.mainClock.currentTime * 1_000_000L }
         val inSession = taps.getDouble("begin") <= 0.0
         controller.chooseCycles(cycles.getInt(if (inSession) "picked" else "before"))
         controller.chooseSound(SoundMode.AMBIENT)
+        // The home screen shows Voice guidance on.
+        controller.chooseVoice(true)
 
         // The sky's time of day eases from morning to night across the opening seconds.
         fun hourAt(v: Double): Double {

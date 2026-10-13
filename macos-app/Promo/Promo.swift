@@ -92,6 +92,9 @@ struct Promo {
 
         let model = SessionModel()
         model.soundMode = .ambient
+        // The home screen shows Voice guidance on. This build has no prompts to load, and
+        // nothing is played.
+        model.voiceOn = true
         model.cycles = script.cycles.before
         // With the clock at v the session is at v - lag, as in the Android renderer.
         let lag = script.session.lagSeconds
