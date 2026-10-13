@@ -271,7 +271,8 @@ private fun HomeScreen(controller: BreatheController, frameNanos: State<Long>) {
                 onSelect = { controller.chooseSound(modes[it]) },
             )
             Spacer(Modifier.height(14.dp))
-            VibrationToggle(controller.hapticsOn, controller::chooseHaptics)
+            SwitchRow("Speak each change", controller.voiceOn, controller::chooseVoice)
+            SwitchRow("Vibrate at each change", controller.hapticsOn, controller::chooseHaptics)
 
             Spacer(Modifier.height(32.dp))
             PrimaryButton("Begin", onClick = controller::begin)
@@ -299,8 +300,9 @@ private fun Label(text: String) {
     )
 }
 
+/** A line of text with a switch at its end; a tap anywhere on the line flips it. */
 @Composable
-private fun VibrationToggle(on: Boolean, onChange: (Boolean) -> Unit) {
+private fun SwitchRow(text: String, on: Boolean, onChange: (Boolean) -> Unit) {
     val ink = LocalInk.current
     val interaction = remember { MutableInteractionSource() }
     Row(
@@ -317,7 +319,7 @@ private fun VibrationToggle(on: Boolean, onChange: (Boolean) -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BasicText(
-            "Vibrate at each change",
+            text,
             Modifier.weight(1f),
             style = TextStyle(color = ink.deep, fontSize = 15.sp),
         )

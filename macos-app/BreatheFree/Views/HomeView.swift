@@ -75,8 +75,22 @@ struct HomeView: View {
                 .font(.system(size: 12))
                 .frame(maxWidth: 360)
                 .padding(.top, 14)
-                .opacity(model.soundMode == .silent ? 0.4 : 1)
-                .disabled(model.soundMode == .silent)
+                // With Silent there is nothing to turn up, unless the voice is on.
+                .opacity(model.soundMode == .silent && !model.voiceOn ? 0.4 : 1)
+                .disabled(model.soundMode == .silent && !model.voiceOn)
+
+                HStack {
+                    Text("Speak each change")
+                        .font(.system(size: 13))
+                        .foregroundColor(ink.deep.color)
+                    Spacer()
+                    Toggle("Speak each change", isOn: $model.voiceOn)
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .labelsHidden()
+                }
+                .frame(maxWidth: 360)
+                .padding(.top, 12)
 
                 Button("Begin", action: model.begin)
                     .buttonStyle(PrimaryButtonStyle())

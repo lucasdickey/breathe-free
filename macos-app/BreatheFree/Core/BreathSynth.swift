@@ -20,8 +20,17 @@ enum SoundMode: String, CaseIterable {
     }
 }
 
-/// Nothing here is a recording. Every layer is computed from the same breath curve the
-/// picture uses, so a swell cannot land early or late and nothing is stretched to fit.
+/// A spoken prompt: mono `samples` at the synth's rate, starting at the first sound, and how
+/// long after that its main vowel comes, in seconds. It is started that much before its
+/// change, so the vowel lands on the change.
+struct VoicePrompt {
+    let samples: [Float]
+    let lead: Double
+}
+
+/// Apart from the voice, nothing here is a recording. Every layer is computed from the same
+/// breath curve the picture uses, so a swell cannot land early or late and nothing is
+/// stretched to fit.
 ///
 /// - Pad: a low D drone (D2, D3, A3) under F#4 and A4, the same chord every cycle, blooming
 ///   as the lungs fill. It all sits below about 1 kHz, and no two voices beat faster than
@@ -29,6 +38,10 @@ enum SoundMode: String, CaseIterable {
 /// - Air: soft filtered noise that moves only while air moves: rising and brightening on
 ///   the inhale, falling and darkening on the exhale, silent during holds.
 /// - Bells: soft-mallet tones exactly on each phase change, one pitch per side of the box.
+/// - Voice (when given prompts): the one recording made here, a spoken "Breathe in", "Hold"
+///   or "Breathe out" started its `lead` early, so its main vowel lands on the change with
+///   the bell. Under a voice the pad, air and bells play 5 dB quieter, so the voice sits
+///   above them without leaning on the limiter.
 ///
 /// Every cycle sounds the same, so the breath can settle into it: every pitch and every slow
 /// beat between voices is a whole number of sixteenths of a hertz, so the pad comes round
@@ -37,6 +50,9 @@ enum SoundMode: String, CaseIterable {
 ///
 /// `render` runs only on the audio thread and never allocates or locks. `mode`, `volume`
 /// and `fadeOut()` may be used from any thread; they are read once per control step.
+///
+/// `voice` holds the prompts for the four phases in order (in, hold full, out, hold empty),
+/// at `sampleRate`; nil for no voice.
 final class BreathSynth {
     var mode: SoundMode = .ambient
     /// 0...1, as on a slider.
@@ -50,7 +66,7 @@ final class BreathSynth {
 
     /// Called on the audio thread as each cue's bells start, with the cue kind (0...3 the
     /// phase, then welcome and closing), its scheduled time and the session time of the
-    /// sample it starts on. This is where spoken prompts will hook in.
+    /// sample it starts on.
     var onCue: ((_ kind: Int, _ scheduled: Double, _ actual: Double) -> Void)?
 
     /// For tests: hear one layer only (0 pad, 1 air, 2 bells), whatever the mode.
@@ -126,9 +142,24 @@ final class BreathSynth {
     private var nextCue = 0
     private var nextCueTime: Double
 
+    // Voice: each phase's prompt, due its lead before the change, one at a time. The four
+    // prompts sit end to end in `promptData` (copied once here, so the audio thread never
+    // touches a Swift array). Pad, air and bells play quieter for the whole session when
+    // there is a voice.
+    private let voiceTimes: UnsafeMutablePointer<Double>
+    private let voiceCount: Int
+    private var nextVoice = 0
+    private var nextVoiceTime: Double
+    private let promptData: UnsafeMutablePointer<Float>
+    private let promptStart: UnsafeMutablePointer<Int>
+    private let promptLength: UnsafeMutablePointer<Int>
+    private var spokenAt = 0
+    private var spokenLeft = 0
+    private let bed: Double
+
     private let table = BreathSynth.sineTable
 
-    init(sampleRate: Double, plan: SessionPlan, seed: UInt32 = 0x5EED) {
+    init(sampleRate: Double, plan: SessionPlan, seed: UInt32 = 0x5EED, voice: [VoicePrompt?]? = nil) {
         self.sampleRate = sampleRate
         self.plan = plan
         dt = 1.0 / sampleRate
@@ -192,6 +223,35 @@ final class BreathSynth {
         cueKinds = kinds
         nextCueTime = times[0]
 
+        let prompts: [VoicePrompt?] = voice ?? []
+        let spoken = voice == nil ? 0 : plan.phaseCount
+        let vt = doubles(max(spoken, 1))
+        for i in 0..<spoken {
+            vt[i] = plan.phaseStart(i) - (prompts.count > i % 4 ? prompts[i % 4]?.lead ?? 0 : 0)
+        }
+        voiceCount = spoken
+        voiceTimes = vt
+        nextVoiceTime = spoken > 0 ? vt[0] : .infinity
+        let starts = ints(4)
+        let lengths = ints(4)
+        var total = 0
+        for kind in 0..<4 {
+            let n = prompts.count > kind ? prompts[kind]?.samples.count ?? 0 : 0
+            starts[kind] = total
+            lengths[kind] = n
+            total += n
+        }
+        let data = UnsafeMutablePointer<Float>.allocate(capacity: max(total, 1))
+        for kind in 0..<4 where lengths[kind] > 0 {
+            prompts[kind]!.samples.withUnsafeBufferPointer { src in
+                (data + starts[kind]).initialize(from: src.baseAddress!, count: lengths[kind])
+            }
+        }
+        promptData = data
+        promptStart = starts
+        promptLength = lengths
+        bed = voice != nil ? Self.bedUnderVoice : 1
+
         // Start the oscillators at scattered phases so the first notes don't all line up.
         var s = seed | 1
         for k in 0..<n {
@@ -203,13 +263,16 @@ final class BreathSynth {
 
     deinit {
         for p in [noteGain, noteGainStep, harm, harmStep, phC, phL, phR, incC, incL, incR,
-                  bellAmp, bellPhase, bellInc, bellEnv, partialMult, cueTimes] {
+                  bellAmp, bellPhase, bellInc, bellEnv, partialMult, cueTimes, voiceTimes] {
             p.deallocate()
         }
         bellActive.deallocate()
         bellDelay.deallocate()
         bellAge.deallocate()
         cueKinds.deallocate()
+        promptData.deallocate()
+        promptStart.deallocate()
+        promptLength.deallocate()
     }
 
     /// Fills `frames` samples of each channel. `startTime` is the session time at which the
@@ -234,6 +297,7 @@ final class BreathSynth {
             // starting the pad at full level.
             startFadeSeconds = target > 1 ? Self.startFadeMidway : Self.startFadeFromZero
             skipCues(before: target - Self.staleCue)
+            skipVoices(before: target - Self.staleVoice)
             return
         }
         let drift = target - clock
@@ -241,6 +305,7 @@ final class BreathSynth {
             clock = target
             rate = 1
             skipCues(before: target - Self.staleCue)
+            skipVoices(before: target - Self.staleVoice)
         } else {
             rate = 1 + min(max(drift / Self.catchUpSeconds, -Self.maxNudge), Self.maxNudge)
         }
@@ -249,6 +314,12 @@ final class BreathSynth {
     private func skipCues(before t: Double) {
         while nextCue < cueCount && cueTimes[nextCue] < t { nextCue += 1 }
         nextCueTime = nextCue < cueCount ? cueTimes[nextCue] : .infinity
+    }
+
+    /// A prompt is only ever started from its beginning: one already under way is let go.
+    private func skipVoices(before t: Double) {
+        while nextVoice < voiceCount && voiceTimes[nextVoice] < t { nextVoice += 1 }
+        nextVoiceTime = nextVoice < voiceCount ? voiceTimes[nextVoice] : .infinity
     }
 
     private func control() {
@@ -354,6 +425,14 @@ final class BreathSynth {
                 nextCue += 1
                 nextCueTime = nextCue < cueCount ? cueTimes[nextCue] : .infinity
             }
+            while clock + tick / 2 >= nextVoiceTime {
+                if clock - nextVoiceTime <= Self.staleVoice {
+                    spokenAt = promptStart[nextVoice % 4]
+                    spokenLeft = promptLength[nextVoice % 4]
+                }
+                nextVoice += 1
+                nextVoiceTime = nextVoice < voiceCount ? voiceTimes[nextVoice] : .infinity
+            }
 
             // Pad.
             var padL = 0.0
@@ -412,6 +491,14 @@ final class BreathSynth {
             bell *= bellGain
             bellGain += bellGainStep
 
+            // Voice: the prompt under way, if any, in both ears.
+            var spoken = 0.0
+            if spokenLeft > 0 {
+                spoken = Double(promptData[spokenAt]) * Self.voiceLevel
+                spokenAt += 1
+                spokenLeft -= 1
+            }
+
             let m = master
             master += masterStep
             let j = offset + i
@@ -419,8 +506,8 @@ final class BreathSynth {
                 left[j] = 0
                 right[j] = 0
             } else {
-                left[j] = Float(Self.soften((padL + airL + bell) * m * gainOut))
-                right[j] = Float(Self.soften((padR + airR + bell) * m * gainOut))
+                left[j] = Float(Self.soften(((padL + airL + bell) * bed + spoken) * m * gainOut))
+                right[j] = Float(Self.soften(((padR + airR + bell) * bed + spoken) * m * gainOut))
             }
             clock += tick
         }
@@ -575,6 +662,14 @@ final class BreathSynth {
     private static let bellAttack = 0.012
     private static let bellLife = 9.0
     private static let bellRelease = 1.0
+
+    // Voice. A prompt starts at its time, or up to 30 ms after; any later (carrying on after
+    // a pause part way through a phrase) it is skipped rather than joined part way. Prompts
+    // come at -20 LUFS: voiceLevel puts them 3 LU above the bed, and the bed is 5 dB down
+    // under a voice, which keeps the two together clear of the limiter.
+    private static let staleVoice = 0.03
+    private static let voiceLevel = 1.11
+    private static let bedUnderVoice = 0.562
 
     private static let welcomeAt = 0.3
     private static let cueWelcome = 4

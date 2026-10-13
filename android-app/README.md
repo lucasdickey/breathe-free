@@ -21,6 +21,11 @@ is generated as it plays. See `../macos-app/README.md` for the full description.
   Bluetooth delay on phones that report it). The synth bends its clock to match, so
   bells land on the boundaries the screen shows.
 - Haptic ticks fire from the frame loop, on the same clock.
+- The voice ("Speak each change"): `audio/VoiceLoader.kt` decodes the three prompts in
+  `res/raw` (AAC) with Android's own decoder, once, off the main thread;
+  `core/VoiceClips.kt` trims each to its first sound and resamples it if the phone doesn't
+  run at 48 kHz; the synth mixes them in on its own clock, each its lead before its change
+  (see `../voice/README.md`).
 
 ## Install
 
