@@ -46,8 +46,8 @@ class VoicePrompt(val samples: FloatArray, val lead: Double)
  * exactly once a cycle, and the air's noise is worked out from where in the cycle it is
  * heard, so each breath's air is the same as the last.
  *
- * [render] runs only on the audio thread. [mode], [volume] and [fadeOut] may be used from
- * any thread; they are read once per control step.
+ * [render] runs only on the audio thread. [mode], [volume], [voiceVolume] and [fadeOut] may be
+ * used from any thread; they are read once per control step.
  *
  * [voice] holds the prompts for the four phases in order (in, hold full, out, hold empty),
  * at [sampleRate]; null for no voice.
@@ -60,8 +60,11 @@ class BreathSynth(
 ) {
     @Volatile var mode: SoundMode = SoundMode.AMBIENT
 
-    /** 0..1, as on a slider. */
+    /** How loud the tone (pad, air and bells) is, 0..1, as on a slider. */
     @Volatile var volume: Double = 1.0
+
+    /** How loud the voice is, 0..1, as on a slider, apart from the tone. */
+    @Volatile var voiceVolume: Double = 1.0
 
     @Volatile private var fadeOutRequested = false
 
@@ -107,10 +110,13 @@ class BreathSynth(
     private var bellGainStep = 0.0
     private var master = 0.0
     private var masterStep = 0.0
+    private var voiceMaster = 0.0
+    private var voiceMasterStep = 0.0
     private var padMix = 0.0
     private var airMix = 0.0
     private var bellMix = 0.0
     private var volMix = -1.0
+    private var voiceVolMix = -1.0
     private var fadeOutGain = 1.0
     private var startGain = 0.0
     private var airCutoff = 400.0
@@ -278,6 +284,9 @@ class BreathSynth(
         val v = volume.coerceIn(0.0, 1.0)
         val volTarget = v * v
         volMix = if (volMix < 0.0) volTarget else volMix + (volTarget - volMix) * volCoef
+        val vv = voiceVolume.coerceIn(0.0, 1.0)
+        val voiceVolTarget = vv * vv
+        voiceVolMix = if (voiceVolMix < 0.0) voiceVolTarget else voiceVolMix + (voiceVolTarget - voiceVolMix) * volCoef
 
         // Pad.
         val padEnv = padEnvelope(t)
@@ -303,14 +312,16 @@ class BreathSynth(
         svf.tune(airCutoff, AIR_Q, sampleRate)
         bellGainStep = (bellMix * BELL_LEVEL - bellGain) / CONTROL
 
-        // Master: volume, the start fade and any requested fade-out.
+        // Master: volume, the start fade and any requested fade-out. The voice has a volume
+        // of its own and shares the fades.
         startGain = min(1.0, startGain + CONTROL * dt / startFadeSeconds)
         if (fadeOutRequested) {
             fadeOutGain = max(0.0, fadeOutGain - CONTROL * dt / FADE_OUT_SECONDS)
         }
         masterStep = (volMix * startGain * fadeOutGain - master) / CONTROL
+        voiceMasterStep = (voiceVolMix * startGain * fadeOutGain - voiceMaster) / CONTROL
 
-        if ((fadeOutRequested && fadeOutGain == 0.0 && master < 1e-6) ||
+        if ((fadeOutRequested && fadeOutGain == 0.0 && master < 1e-6 && voiceMaster < 1e-6) ||
             t > plan.endTime + SessionPlan.CLOSING_SECONDS
         ) {
             finished = true
@@ -413,13 +424,15 @@ class BreathSynth(
 
             val m = master
             master += masterStep
+            val mv = voiceMaster
+            voiceMaster += voiceMasterStep
             val j = 2 * (offset + i)
             if (finished) {
                 out[j] = 0f
                 out[j + 1] = 0f
             } else {
-                out[j] = soften(((padL + airL + bell) * bed + spoken) * m * OUTPUT_GAIN).toFloat()
-                out[j + 1] = soften(((padR + airR + bell) * bed + spoken) * m * OUTPUT_GAIN).toFloat()
+                out[j] = soften(((padL + airL + bell) * bed * m + spoken * mv) * OUTPUT_GAIN).toFloat()
+                out[j + 1] = soften(((padR + airR + bell) * bed * m + spoken * mv) * OUTPUT_GAIN).toFloat()
             }
             clock += tick
         }

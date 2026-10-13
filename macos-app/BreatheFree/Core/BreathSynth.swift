@@ -48,15 +48,18 @@ struct VoicePrompt {
 /// exactly once a cycle, and the air's noise is worked out from where in the cycle it is
 /// heard, so each breath's air is the same as the last.
 ///
-/// `render` runs only on the audio thread and never allocates or locks. `mode`, `volume`
-/// and `fadeOut()` may be used from any thread; they are read once per control step.
+/// `render` runs only on the audio thread and never allocates or locks. `mode`, `volume`,
+/// `voiceVolume` and `fadeOut()` may be used from any thread; they are read once per control
+/// step.
 ///
 /// `voice` holds the prompts for the four phases in order (in, hold full, out, hold empty),
 /// at `sampleRate`; nil for no voice.
 final class BreathSynth {
     var mode: SoundMode = .ambient
-    /// 0...1, as on a slider.
+    /// How loud the tone (pad, air and bells) is, 0...1, as on a slider.
     var volume: Double = 1.0
+    /// How loud the voice is, 0...1, as on a slider, apart from the tone.
+    var voiceVolume: Double = 1.0
     /// True once the closing chord has died away, or a requested fade-out has finished.
     private(set) var finished = false
     private var fadeOutRequested = false
@@ -97,10 +100,13 @@ final class BreathSynth {
     private var bellGainStep = 0.0
     private var master = 0.0
     private var masterStep = 0.0
+    private var voiceMaster = 0.0
+    private var voiceMasterStep = 0.0
     private var padMix = 0.0
     private var airMix = 0.0
     private var bellMix = 0.0
     private var volMix = -1.0
+    private var voiceVolMix = -1.0
     private var fadeOutGain = 1.0
     private var startGain = 0.0
     private var airCutoff = 400.0
@@ -361,6 +367,9 @@ final class BreathSynth {
         let v = min(max(volume, 0), 1)
         let volTarget = v * v
         volMix = volMix < 0 ? volTarget : volMix + (volTarget - volMix) * volCoef
+        let vv = min(max(voiceVolume, 0), 1)
+        let voiceVolTarget = vv * vv
+        voiceVolMix = voiceVolMix < 0 ? voiceVolTarget : voiceVolMix + (voiceVolTarget - voiceVolMix) * volCoef
 
         // Pad.
         let padEnv = padEnvelope(t)
@@ -388,14 +397,16 @@ final class BreathSynth {
         svf.tune(cutoff: airCutoff, q: Self.airQ, sampleRate: sampleRate)
         bellGainStep = (bellMix * Self.bellLevel - bellGain) / blocks
 
-        // Master: volume, the start fade and any requested fade-out.
+        // Master: volume, the start fade and any requested fade-out. The voice has a volume
+        // of its own and shares the fades.
         startGain = min(1, startGain + blocks * dt / startFadeSeconds)
         if fadeOutRequested {
             fadeOutGain = max(0, fadeOutGain - blocks * dt / Self.fadeOutSeconds)
         }
         masterStep = (volMix * startGain * fadeOutGain - master) / blocks
+        voiceMasterStep = (voiceVolMix * startGain * fadeOutGain - voiceMaster) / blocks
 
-        if (fadeOutRequested && fadeOutGain == 0 && master < 1e-6) ||
+        if (fadeOutRequested && fadeOutGain == 0 && master < 1e-6 && voiceMaster < 1e-6) ||
             t > plan.endTime + SessionPlan.closingSeconds {
             finished = true
         }
@@ -501,13 +512,15 @@ final class BreathSynth {
 
             let m = master
             master += masterStep
+            let mv = voiceMaster
+            voiceMaster += voiceMasterStep
             let j = offset + i
             if finished {
                 left[j] = 0
                 right[j] = 0
             } else {
-                left[j] = Float(Self.soften(((padL + airL + bell) * bed + spoken) * m * gainOut))
-                right[j] = Float(Self.soften(((padR + airR + bell) * bed + spoken) * m * gainOut))
+                left[j] = Float(Self.soften(((padL + airL + bell) * bed * m + spoken * mv) * gainOut))
+                right[j] = Float(Self.soften(((padR + airR + bell) * bed * m + spoken * mv) * gainOut))
             }
             clock += tick
         }

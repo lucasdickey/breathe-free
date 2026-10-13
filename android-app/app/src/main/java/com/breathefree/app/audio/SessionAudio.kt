@@ -34,11 +34,13 @@ class SessionAudio(
     mode: SoundMode,
     volume: Double = 1.0,
     voice: VoiceClips? = null,
+    voiceVolume: Double = volume,
 ) {
     private val sampleRate = nativeSampleRate()
     private val synth = BreathSynth(sampleRate, plan, voice = voice?.prompts(sampleRate)).also {
         it.mode = mode
         it.volume = volume
+        it.voiceVolume = voiceVolume
     }
 
     @Volatile private var running = true
@@ -46,9 +48,14 @@ class SessionAudio(
 
     fun start() = thread.start()
 
-    /** How loud, 0 to 1. The synth glides to it, so moving the slider doesn't click. */
+    /** How loud the tone is, 0 to 1. The synth glides to it, so moving the slider doesn't click. */
     fun setVolume(volume: Double) {
         synth.volume = volume
+    }
+
+    /** How loud the voice is, 0 to 1, gliding the same way. */
+    fun setVoiceVolume(volume: Double) {
+        synth.voiceVolume = volume
     }
 
     /** Fade out over a third of a second, then let go of the speaker. Returns at once. */

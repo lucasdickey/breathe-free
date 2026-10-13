@@ -43,8 +43,9 @@ final class SessionAudio {
     }
 
     /// Returns nil if there is no audio output to play on. `voice`, if given, is spoken at
-    /// each change (see BreathSynth).
-    init?(plan: SessionPlan, startTime: CFTimeInterval, mode: SoundMode, volume: Double, voice: VoiceClips? = nil) {
+    /// each change (see BreathSynth), at `voiceVolume`, or as loud as the tone if that's nil.
+    init?(plan: SessionPlan, startTime: CFTimeInterval, mode: SoundMode, volume: Double, voice: VoiceClips? = nil,
+          voiceVolume: Double? = nil) {
         let engine = AVAudioEngine()
         let output = engine.outputNode
         let hardwareRate = output.outputFormat(forBus: 0).sampleRate
@@ -54,6 +55,7 @@ final class SessionAudio {
         let synth = BreathSynth(sampleRate: sampleRate, plan: plan, voice: voice?.prompts(sampleRate: sampleRate))
         synth.mode = mode
         synth.volume = volume
+        synth.voiceVolume = voiceVolume ?? volume
         let timing = Timing(startTime: startTime, latency: output.presentationLatency)
         self.engine = engine
         self.synth = synth
@@ -107,9 +109,16 @@ final class SessionAudio {
         engine.stop()
     }
 
+    /// How loud the tone is. The synth glides to it, so moving a slider doesn't click.
     var volume: Double {
         get { synth.volume }
         set { synth.volume = newValue }
+    }
+
+    /// How loud the voice is, gliding the same way.
+    var voiceVolume: Double {
+        get { synth.voiceVolume }
+        set { synth.voiceVolume = newValue }
     }
 
     /// Fade out over a third of a second, then release the output. Safe to drop the

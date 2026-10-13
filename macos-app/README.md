@@ -24,7 +24,9 @@ hold for four, with an eight-second settle at the start.
 - **Sound modes**: Ambient, Bells only, or Silent, chosen before a session, plus a
   volume slider. In a session, the speaker sets how loud it is.
 - **Speak each change**: says "Breathe in", "Hold" and "Breathe out" in Lucas's voice,
-  each main vowel on its change, over Ambient or Bells or alone with Silent. The prompts
+  each main vowel on its change, over Ambient or Bells or alone with Silent. It has a
+  volume of its own, under its switch; in a session the speaker then shows two sliders,
+  Tone and Voice. The prompts
   are AAC in `BreatheFree/Voice`, decoded once off the main thread (`Audio/VoiceLoader.swift`,
   `Core/VoiceClips.swift`) and mixed in by the synth on its own clock (see
   `../voice/README.md`).

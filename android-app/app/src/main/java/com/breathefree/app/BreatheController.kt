@@ -71,8 +71,15 @@ class BreatheController(
     var hapticsOn by mutableStateOf(prefs.getBoolean(KEY_HAPTICS, true))
         private set
 
-    /** How loud the sound is, 0 to 1, set with the speaker during a session. */
+    /** How loud the tone (pad, air and bells) is, 0 to 1, set with the speaker during a session. */
     var volume by mutableFloatStateOf(prefs.getFloat(KEY_VOLUME, DEFAULT_VOLUME).coerceIn(0f, 1f))
+        private set
+
+    /**
+     * How loud the voice is, 0 to 1, set beside the tone's and apart from it. Before it has ever
+     * been set it starts as loud as the tone, the balance the voice was mixed at.
+     */
+    var voiceVolume by mutableFloatStateOf(prefs.getFloat(KEY_VOICE_VOLUME, volume).coerceIn(0f, 1f))
         private set
 
     /** Say each change aloud ("Breathe in", "Hold", "Breathe out"). Off until chosen. */
@@ -142,6 +149,14 @@ class BreatheController(
         volume = v
         prefs.edit().putFloat(KEY_VOLUME, v).apply()
         audio?.setVolume(v.toDouble())
+    }
+
+    /** Set from the voice's slider, the same way. */
+    fun chooseVoiceVolume(level: Float) {
+        val v = level.coerceIn(0f, 1f)
+        voiceVolume = v
+        prefs.edit().putFloat(KEY_VOICE_VOLUME, v).apply()
+        audio?.setVoiceVolume(v.toDouble())
     }
 
     fun begin() {
@@ -214,7 +229,8 @@ class BreatheController(
         val voice = voiceForSession()
         // Silent with the voice on still plays: the voice alone.
         if (mode == SoundMode.SILENT && voice == null) return
-        audio = SessionAudio(active.plan, active.startNanos, mode, volume.toDouble(), voice).also { it.start() }
+        audio = SessionAudio(active.plan, active.startNanos, mode, volume.toDouble(), voice, voiceVolume.toDouble())
+            .also { it.start() }
     }
 
     private fun stopAudio() {
@@ -228,6 +244,7 @@ class BreatheController(
         const val KEY_HAPTICS = "haptics"
         const val KEY_VOLUME = "volume"
         const val KEY_VOICE = "voice"
+        const val KEY_VOICE_VOLUME = "voiceVolume"
         const val DEFAULT_VOLUME = 1f // as loud as it played before it had a slider
         const val VOICE_WAIT_MS = 1_500L
         const val LEAD_NANOS = 350_000_000L

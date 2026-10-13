@@ -21,10 +21,20 @@ final class SessionModel: ObservableObject {
         didSet { defaults.set(soundMode.rawValue, forKey: Keys.sound) }
     }
 
+    /// How loud the tone (pad, air and bells) is.
     @Published var volume: Double {
         didSet {
             defaults.set(volume, forKey: Keys.volume)
             audio?.volume = volume
+        }
+    }
+
+    /// How loud the voice is, apart from the tone. Before it has ever been set it starts as
+    /// loud as the tone, the balance the voice was mixed at.
+    @Published var voiceVolume: Double {
+        didSet {
+            defaults.set(voiceVolume, forKey: Keys.voiceVolume)
+            audio?.voiceVolume = voiceVolume
         }
     }
 
@@ -55,7 +65,9 @@ final class SessionModel: ObservableObject {
         let saved = defaults.integer(forKey: Keys.cycles)
         cycles = SessionPlan.cycleChoices.contains(saved) ? saved : SessionPlan.defaultCycles
         soundMode = SoundMode(rawValue: defaults.string(forKey: Keys.sound) ?? "") ?? .ambient
-        volume = defaults.object(forKey: Keys.volume) as? Double ?? 0.85
+        let savedVolume = defaults.object(forKey: Keys.volume) as? Double ?? 0.85
+        volume = savedVolume
+        voiceVolume = defaults.object(forKey: Keys.voiceVolume) as? Double ?? savedVolume
         voiceOn = defaults.bool(forKey: Keys.voice)
         if voiceOn { prepareVoice() }
     }
@@ -113,7 +125,8 @@ final class SessionModel: ObservableObject {
         let voice = voiceForSession()
         // Silent with the voice on still plays: the voice alone.
         guard mode != .silent || voice != nil else { return }
-        audio = SessionAudio(plan: active.plan, startTime: active.startTime, mode: mode, volume: volume, voice: voice)
+        audio = SessionAudio(plan: active.plan, startTime: active.startTime, mode: mode, volume: volume, voice: voice,
+                             voiceVolume: voiceVolume)
     }
 
     /// Decodes the prompts once, off the main thread, so they're ready well before Begin.
@@ -181,5 +194,6 @@ final class SessionModel: ObservableObject {
         static let sound = "sound"
         static let volume = "volume"
         static let voice = "voice"
+        static let voiceVolume = "voiceVolume"
     }
 }

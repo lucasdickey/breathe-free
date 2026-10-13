@@ -52,7 +52,10 @@ resolution; the JavaScript one differs by at most the smallest 16-bit step on ab
 
 "Speak each change", a switch on the home screen, says each change aloud in Lucas's own
 voice: "Breathe in", "Hold" and "Breathe out". It plays over Ambient or Bells, or alone
-with Silent, and the volume slider covers it like everything else.
+with Silent. The voice and the tone (pad, air and bells) each have a volume: in a session
+the speaker opens a slider for each, and on the Mac's home screen the voice's sits under
+its switch. Until the voice's is first moved it starts where the tone's is, the balance it
+was mixed at.
 
 The prompts are mixed into the sound by `BreathSynth` itself, so they keep the same clock
 as everything else, including the allowance for Bluetooth delay. Each starts a little
