@@ -336,8 +336,8 @@ class Phone:
 
 class MacHome:
     """Where things are on the Mac home screen, measured from its frames, and the one thing the
-    still renderer can't show: the volume slider, an AppKit control it leaves a placeholder for.
-    (Session length's motion it draws itself, from the moments in the script.)"""
+    still renderer can't show: the Voice guidance switch, an AppKit control it leaves a yellow
+    placeholder for. (Session length's motion it draws itself, from the moments in the script.)"""
 
     def __init__(self, load):
         closed = np.asarray(load(frame_index_before(TAPS["open"]) - 3), dtype=np.int32)
@@ -366,35 +366,46 @@ class MacHome:
             "pick": (self.cx + self.slot(self.picked), self.cy),
             "begin": begin,
         }
+        # The switch's placeholder, the one patch of the renderer's yellow on the screen.
         yellow = (closed[:, :, 0] > 200) & (closed[:, :, 1] > 150) & (closed[:, :, 2] < 110)
-        ys, xs = np.nonzero(yellow)
-        self.slider = (xs.min() - 2, ys.min() - 2, xs.max() + 3, ys.max() + 3) if len(xs) else None
-        self.begin_probe = (int(begin[0] + 100 * self.pt), int(begin[1]))
+        boxes = [(x0 - 2, y0 - 2, x1 + 2, y1 + 2)
+                 for y0, y1 in runs(yellow.any(axis=1))
+                 for x0, x1 in runs(yellow[y0:y1].any(axis=0))
+                 if x1 - x0 >= 8 * self.pt and y1 - y0 >= 8 * self.pt]  # not a yellow fleck of the sky
+        if len(boxes) != 1:
+            sys.exit(f"expected the Voice guidance switch alone on the Mac home screen, "
+                     f"found {len(boxes)} controls")
+        self.switch = boxes[0]
 
     def slot(self, i):
         return (i - (len(CHOICES) - 1) / 2) * self.step
 
-    def fix_slider(self, frame):
-        """Paints the volume slider where its placeholder is: the sky behind it, a track, the
-        level filled to the app's default of 0.85 and a knob."""
-        if not self.slider:
-            return frame
-        x0, y0, x1, y1 = self.slider
+    def fix_switch(self, frame):
+        """Paints the Voice guidance switch where its placeholder is, on, as the promo has the
+        voice on (macos-app/Promo/Promo.swift): the system's blue with a white knob, against
+        the right edge of its row."""
+        x0, y0, x1, y1 = self.switch
         a = np.asarray(frame, dtype=np.float32).copy()
-        t = np.linspace(0, 1, y1 - y0)[:, None, None]
-        a[y0:y1, x0:x1] = a[y0 - 3, x0:x1][None] * (1 - t) + a[y1 + 3, x0:x1][None] * t
+        # The sky behind it, blended in from the sky all round so that it meets it at every
+        # edge, clouds and all; from a little further out at the sides, where the JPEG leaves
+        # a faint smudge for 10 pixels or so beside the yellow.
+        fx0, fy0, fx1, fy1 = x0 - 10, y0 - 2, x1 + 10, y1 + 2
+        top, bottom, left, right = fy0 - 3, fy1 + 3, fx0 - 3, fx1 + 3
+        t = np.linspace(0, 1, fy1 - fy0)[:, None, None]
+        u = np.linspace(0, 1, fx1 - fx0)[None, :, None]
+        corners = ((1 - t) * ((1 - u) * a[top, left] + u * a[top, right])
+                   + t * ((1 - u) * a[bottom, left] + u * a[bottom, right]))
+        a[fy0:fy1, fx0:fx1] = ((1 - t) * a[top, fx0:fx1][None] + t * a[bottom, fx0:fx1][None]
+                               + (1 - u) * a[fy0:fy1, left][:, None] + u * a[fy0:fy1, right][:, None]
+                               - corners)
         img = Image.fromarray(a.clip(0, 255).astype(np.uint8))
-        night = min(frame.getpixel(self.begin_probe)) > 200  # Begin is white on a night sky
         d = ImageDraw.Draw(img, "RGBA")
-        s, cy = self.pt, (y0 + y1) / 2
-        left, right = x0 + 6 * s, x1 - 6 * s
-        knob = left + (right - left) * 0.85
-        d.rounded_rectangle([left, cy - 2 * s, right, cy + 2 * s], 2 * s,
-                            fill=(255, 255, 255, 70) if night else (15, 42, 67, 46))
-        d.rounded_rectangle([left, cy - 2 * s, knob, cy + 2 * s], 2 * s, fill=(10, 132, 255, 255))
-        r = 9 * s
-        d.ellipse([knob - r, cy - r + 1.5, knob + r, cy + r + 1.5], fill=(0, 0, 0, 55))
-        d.ellipse([knob - r, cy - r, knob + r, cy + r], fill=(255, 255, 255, 255), outline=(0, 0, 0, 38))
+        s, cy, h = self.pt, (y0 + y1) / 2, 22 * self.pt
+        end = x1 - 2
+        d.rounded_rectangle([end - 38 * s, cy - h / 2, end, cy + h / 2], h / 2, fill=(10, 132, 255, 255))
+        kx, r = end - h / 2, h / 2 - 1.5 * s
+        d.ellipse([kx - r, cy - r + 1.5, kx + r, cy + r + 1.5], fill=(0, 0, 0, 55))
+        d.ellipse([kx - r, cy - r, kx + r, cy + r], fill=(255, 255, 255, 255), outline=(0, 0, 0, 38))
         return img
 
 class MacWindow:
@@ -584,7 +595,7 @@ class Edit:
         if k not in self.cache:
             img = self.load(k)
             if self.home and k / FPS < TAPS["begin"]:
-                img = self.home.fix_slider(img)
+                img = self.home.fix_switch(img)
             if len(self.cache) > 8:
                 self.cache.clear()
             self.cache[k] = img
