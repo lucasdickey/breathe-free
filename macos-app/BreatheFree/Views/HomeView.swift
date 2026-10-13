@@ -66,12 +66,8 @@ struct HomeView: View {
                 SegmentedChoice(options: [(SoundMode.ambient, "Ambient"), (.bells, "Bells"), (.silent, "Silent")],
                                 selection: $model.soundMode)
                     .padding(.top, 10)
-                // The tone's volume, under its choice; with Silent there is no tone to turn up.
-                volumeRow($model.volume, label: model.voiceOn ? "Tone volume" : "Volume")
-                    .padding(.top, 14)
-                    .opacity(model.soundMode == .silent ? 0.4 : 1)
-                    .disabled(model.soundMode == .silent)
 
+                // Only what to hear here; how loud is set in the session, from the speaker.
                 HStack {
                     Text("Voice guidance")
                         .font(.system(size: 13))
@@ -83,12 +79,7 @@ struct HomeView: View {
                         .labelsHidden()
                 }
                 .frame(maxWidth: 360)
-                .padding(.top, 12)
-                // The voice's own volume, under its switch, dimmed while the voice is off.
-                volumeRow($model.voiceVolume, label: "Voice volume")
-                    .padding(.top, 8)
-                    .opacity(model.voiceOn ? 1 : 0.4)
-                    .disabled(!model.voiceOn)
+                .padding(.top, 14)
 
                 Button("Begin", action: model.begin)
                     .buttonStyle(PrimaryButtonStyle())
@@ -99,17 +90,6 @@ struct HomeView: View {
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 28)
-    }
-
-    private func volumeRow(_ value: Binding<Double>, label: String) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: "speaker.fill").foregroundColor(ink.soft.color)
-            Slider(value: value, in: 0...1)
-                .accessibilityLabel(label)
-            Image(systemName: "speaker.wave.3.fill").foregroundColor(ink.soft.color)
-        }
-        .font(.system(size: 12))
-        .frame(maxWidth: 360)
     }
 
     private func label(_ text: String) -> some View {
