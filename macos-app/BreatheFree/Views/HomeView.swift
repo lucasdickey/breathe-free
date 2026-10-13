@@ -73,11 +73,11 @@ struct HomeView: View {
                     .disabled(model.soundMode == .silent)
 
                 HStack {
-                    Text("Speak each change")
+                    Text("Voice guidance")
                         .font(.system(size: 13))
                         .foregroundColor(ink.deep.color)
                     Spacer()
-                    Toggle("Speak each change", isOn: $model.voiceOn)
+                    Toggle("Voice guidance", isOn: $model.voiceOn)
                         .toggleStyle(.switch)
                         .controlSize(.small)
                         .labelsHidden()

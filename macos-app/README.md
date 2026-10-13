@@ -23,7 +23,7 @@ hold for four, with an eight-second settle at the start.
     quieter high and low notes for the holds.
 - **Sound modes**: Ambient, Bells only, or Silent, chosen before a session, plus a
   volume slider. In a session, the speaker sets how loud it is.
-- **Speak each change**: says "Breathe in", "Hold" and "Breathe out" in Lucas's voice,
+- **Voice guidance**: says "Breathe in", "Hold" and "Breathe out" in Lucas's voice,
   each main vowel on its change, over Ambient or Bells or alone with Silent. It has a
   volume of its own, under its switch; in a session the speaker then shows two sliders,
   Tone and Voice. The prompts

@@ -1,6 +1,6 @@
 # The voice
 
-Lucas's own voice says each change aloud when "Speak each change" is on: "Breathe in",
+Lucas's own voice says each change aloud when "Voice guidance" is on: "Breathe in",
 "Hold" (for both holds) and "Breathe out". It is the one recording in the sound; everything
 else is generated as it plays (see the top-level README).
 
