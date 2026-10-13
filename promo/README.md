@@ -24,10 +24,9 @@ runs at its true pace and every bell lands on its frame.
    (`macos-app/Promo/Promo.swift`) and attaches them to the run as
    `BreatheFree-macOS-promo-frames`. Session length's motion is a function of the media
    clock, so the renderer draws it frame by frame like the sky (`PickerMoment` tells the
-   picker when it was opened and picked). The home screen's two volume sliders and its
-   Voice guidance switch are AppKit controls, which the renderer leaves a yellow placeholder
-   for each, so the edit paints them in: the sliders at the app's default level, and the
-   switch on, as both renderers have the voice on.
+   picker when it was opened and picked). The home screen's Voice guidance switch is an
+   AppKit control, which the renderer leaves a yellow placeholder for, so the edit paints it
+   in, on, as both renderers have the voice on.
 
 3. **The edit**: `compose.py` puts the frames in a phone or a Mac window on the app's own
    sky, pushes in on session length while it is used, adds the taps or the pointer, the
