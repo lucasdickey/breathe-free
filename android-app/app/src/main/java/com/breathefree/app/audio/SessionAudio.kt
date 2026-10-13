@@ -10,6 +10,7 @@ import android.util.Log
 import com.breathefree.app.core.BreathSynth
 import com.breathefree.app.core.SessionPlan
 import com.breathefree.app.core.SoundMode
+import com.breathefree.app.core.VoiceClips
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.max
@@ -32,9 +33,10 @@ class SessionAudio(
     private val startNanos: Long,
     mode: SoundMode,
     volume: Double = 1.0,
+    voice: VoiceClips? = null,
 ) {
     private val sampleRate = nativeSampleRate()
-    private val synth = BreathSynth(sampleRate, plan).also {
+    private val synth = BreathSynth(sampleRate, plan, voice = voice?.prompts(sampleRate)).also {
         it.mode = mode
         it.volume = volume
     }
@@ -185,12 +187,13 @@ class SessionAudio(
             .build()
     }
 
-    private companion object {
-        const val TAG = "BreatheAudio"
-        const val NANOS = 1_000_000_000L
-        const val GUESSED_DELAY_NANOS = 40_000_000L
+    companion object {
+        private const val TAG = "BreatheAudio"
+        private const val NANOS = 1_000_000_000L
+        private const val GUESSED_DELAY_NANOS = 40_000_000L
 
-        fun nativeSampleRate(): Int {
+        /** The rate the sound is made at: the phone's own output rate. */
+        internal fun nativeSampleRate(): Int {
             val rate = AudioTrack.getNativeOutputSampleRate(AudioManager.STREAM_MUSIC)
             return if (rate in 22_050..96_000) rate else 48_000
         }

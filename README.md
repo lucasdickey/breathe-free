@@ -48,13 +48,21 @@ each other. A rendered session is identical between Kotlin and Swift at 16-bit
 resolution; the JavaScript one differs by at most the smallest 16-bit step on about
 0.02% of samples (rounding in the browser's maths library).
 
-## Adding a recorded voice (next step)
+## A recorded voice
 
-The synth already marks each cue (every phase change, the welcome and the closing) at
-the exact sample it starts on: `onCue` in `BreathSynth`. Spoken prompts, for example
-ElevenLabs recordings of "Breathe in", "Hold" and "Breathe out", will be mixed in at
-those same samples, nudged a little early so the stressed word lands on the change.
-They would become a fourth sound mode alongside Ambient, Bells and Silent.
+"Speak each change", a switch on the home screen, says each change aloud in Lucas's own
+voice: "Breathe in", "Hold" and "Breathe out". It plays over Ambient or Bells, or alone
+with Silent, and the volume slider covers it like everything else.
+
+The prompts are mixed into the sound by `BreathSynth` itself, so they keep the same clock
+as everything else, including the allowance for Bluetooth delay. Each starts a little
+before its change (its lead, 29 to 167 ms), so its main vowel lands on the change with the
+bell, and each only ever starts from its beginning: carrying on after a pause part way
+through a phrase lets that phrase go. With the voice on, the pad, air and bells play 5 dB
+quieter, so the voice sits above them without leaning on the limiter.
+
+The clips, how they were cut and cleaned, and how to make new ones are in
+[`voice/`](voice/README.md).
 
 ## Builds
 

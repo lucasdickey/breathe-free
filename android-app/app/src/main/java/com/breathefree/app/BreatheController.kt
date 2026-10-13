@@ -7,10 +7,15 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.breathefree.app.audio.SessionAudio
+import com.breathefree.app.audio.VoiceLoader
 import com.breathefree.app.core.BreathFrame
 import com.breathefree.app.core.SessionPlan
 import com.breathefree.app.core.SoundMode
 import com.breathefree.app.core.Stage
+import com.breathefree.app.core.VoiceClips
+import java.util.concurrent.Future
+import java.util.concurrent.FutureTask
+import java.util.concurrent.TimeUnit
 
 enum class Screen { HOME, SESSION, DONE }
 
@@ -40,8 +45,15 @@ data class ActiveSession(val plan: SessionPlan, val startNanos: Long, val paused
 /**
  * App state: the saved choices, the current screen and the session's sound and touch.
  * [nanoTime] must share a timebase with the frame clock; on a device that is System.nanoTime().
+ * [loadVoice] decodes the spoken prompts; it runs once, off the main thread, when the voice
+ * is first wanted.
  */
-class BreatheController(context: Context, private val nanoTime: () -> Long = System::nanoTime) {
+class BreatheController(
+    context: Context,
+    private val loadVoice: (Context) -> VoiceClips? = VoiceLoader::load,
+    private val nanoTime: () -> Long = System::nanoTime,
+) {
+    private val appContext = context.applicationContext
     private val prefs = context.getSharedPreferences("breathe", Context.MODE_PRIVATE)
     private val haptics = Haptics(context)
 
@@ -63,6 +75,12 @@ class BreatheController(context: Context, private val nanoTime: () -> Long = Sys
     var volume by mutableFloatStateOf(prefs.getFloat(KEY_VOLUME, DEFAULT_VOLUME).coerceIn(0f, 1f))
         private set
 
+    /** Say each change aloud ("Breathe in", "Hold", "Breathe out"). Off until chosen. */
+    var voiceOn by mutableStateOf(prefs.getBoolean(KEY_VOICE, false))
+        private set
+
+    private var voiceClips: Future<VoiceClips?>? = null
+
     var screen by mutableStateOf(Screen.HOME)
         private set
 
@@ -71,6 +89,10 @@ class BreatheController(context: Context, private val nanoTime: () -> Long = Sys
 
     private var audio: SessionAudio? = null
     private var lastPhaseIndex = NO_PHASE
+
+    init {
+        if (voiceOn) prepareVoice()
+    }
 
     fun chooseCycles(n: Int) {
         cycles = n
@@ -85,6 +107,33 @@ class BreatheController(context: Context, private val nanoTime: () -> Long = Sys
     fun chooseHaptics(on: Boolean) {
         hapticsOn = on
         prefs.edit().putBoolean(KEY_HAPTICS, on).apply()
+    }
+
+    fun chooseVoice(on: Boolean) {
+        voiceOn = on
+        prefs.edit().putBoolean(KEY_VOICE, on).apply()
+        if (on) prepareVoice()
+    }
+
+    /** Decodes the prompts once, off the main thread, so they're ready well before Begin. */
+    private fun prepareVoice() {
+        if (voiceClips != null) return
+        val task = FutureTask { loadVoice(appContext) }
+        voiceClips = task
+        Thread(task, "voice-decode").apply { isDaemon = true }.start()
+    }
+
+    /** The prompts for a session starting now, or null to play it without a voice. */
+    private fun voiceForSession(): VoiceClips? {
+        if (!voiceOn) return null
+        prepareVoice()
+        // Decoding takes a fraction of a second and starts when the voice is chosen, so this
+        // only waits if Begin comes straight after switching it on.
+        return try {
+            voiceClips?.get(VOICE_WAIT_MS, TimeUnit.MILLISECONDS)
+        } catch (e: Exception) {
+            null
+        }
     }
 
     /** Set from the volume slider; the sound playing follows at once, and it is kept for next time. */
@@ -162,8 +211,10 @@ class BreatheController(context: Context, private val nanoTime: () -> Long = Sys
     }
 
     private fun startAudio(active: ActiveSession, mode: SoundMode) {
-        if (mode == SoundMode.SILENT) return
-        audio = SessionAudio(active.plan, active.startNanos, mode, volume.toDouble()).also { it.start() }
+        val voice = voiceForSession()
+        // Silent with the voice on still plays: the voice alone.
+        if (mode == SoundMode.SILENT && voice == null) return
+        audio = SessionAudio(active.plan, active.startNanos, mode, volume.toDouble(), voice).also { it.start() }
     }
 
     private fun stopAudio() {
@@ -176,7 +227,9 @@ class BreatheController(context: Context, private val nanoTime: () -> Long = Sys
         const val KEY_SOUND = "sound"
         const val KEY_HAPTICS = "haptics"
         const val KEY_VOLUME = "volume"
+        const val KEY_VOICE = "voice"
         const val DEFAULT_VOLUME = 1f // as loud as it played before it had a slider
+        const val VOICE_WAIT_MS = 1_500L
         const val LEAD_NANOS = 350_000_000L
         const val NO_PHASE = Int.MIN_VALUE
     }
