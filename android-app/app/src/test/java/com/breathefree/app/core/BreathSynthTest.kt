@@ -312,12 +312,32 @@ class BreathSynthTest {
     }
 
     @Test
-    fun theVolumeTurnsTheVoiceDownToo() {
+    fun theVoiceHasAVolumeOfItsOwn() {
         val plan = SessionPlan(2)
         val full = render(plan, mode = SoundMode.SILENT, seconds = 9.0, voice = prompts)
-        val half = render(plan, mode = SoundMode.SILENT, seconds = 9.0, voice = prompts) { it.volume = 0.5 }
+        val half = render(plan, mode = SoundMode.SILENT, seconds = 9.0, voice = prompts) { it.voiceVolume = 0.5 }
         // The slider is squared, as for everything else: half way is a quarter of the level.
         assertEquals(0.25, peak(half) / peak(full), 0.01)
+        // The tone's volume leaves the voice alone.
+        val toneDown = render(plan, mode = SoundMode.SILENT, seconds = 9.0, voice = prompts) { it.volume = 0.5 }
+        assertEquals(1.0, peak(toneDown) / peak(full), 1e-9)
+    }
+
+    @Test
+    fun theVoiceVolumeLeavesTheToneAlone() {
+        // Ambient into the first hold. Outside the prompts ("in" from 7.85 s for 0.40 s, "hold"
+        // from 11.9 s) only the tone plays, and turning the voice down changes none of it.
+        val plan = SessionPlan(2)
+        val full = render(plan, seconds = 12.5, voice = prompts)
+        val quiet = render(plan, seconds = 12.5, voice = prompts) { it.voiceVolume = 0.2 }
+        val spoken = listOf(7.85 to 8.25, 11.9 to 12.15)
+        for (i in full.indices) {
+            val t = (i / 2).toDouble() / rate
+            if (spoken.any { (a, b) -> t >= a - 0.001 && t < b + 0.001 }) continue
+            assertEquals("sample $i", full[i], quiet[i], 0f)
+        }
+        // While a prompt plays, the difference is the voice turned down.
+        assertTrue(full.indices.any { full[it] != quiet[it] })
     }
 
     @Test

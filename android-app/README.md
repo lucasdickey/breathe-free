@@ -25,7 +25,8 @@ is generated as it plays. See `../macos-app/README.md` for the full description.
   `res/raw` (AAC) with Android's own decoder, once, off the main thread;
   `core/VoiceClips.kt` trims each to its first sound and resamples it if the phone doesn't
   run at 48 kHz; the synth mixes them in on its own clock, each its lead before its change
-  (see `../voice/README.md`).
+  (see `../voice/README.md`). The voice has a volume of its own: with it on, the session's
+  speaker opens two sliders, Tone and Voice.
 
 ## Install
 

@@ -112,12 +112,7 @@ struct SessionView: View {
                 .keyboardShortcut(.space, modifiers: [])
             RoundIconButton(systemImage: volumeSymbol, label: "Volume") { showVolume.toggle() }
                 .popover(isPresented: $showVolume, arrowEdge: .bottom) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "speaker.fill")
-                        Slider(value: $model.volume, in: 0...1).frame(width: 180)
-                        Image(systemName: "speaker.wave.3.fill")
-                    }
-                    .padding(16)
+                    volumePanel.padding(16)
                 }
             EndSessionButton(open: endOpen, end: model.endSession)
         }
@@ -125,9 +120,34 @@ struct SessionView: View {
         .padding(.horizontal, 16)
     }
 
-    /// The volume button shows how loud it is, as the menu bar's speaker does.
+    /// How loud: one slider, or with the voice on, the tone's and the voice's, each named.
+    @ViewBuilder private var volumePanel: some View {
+        if model.voiceOn {
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
+                GridRow {
+                    Text("Tone")
+                    Slider(value: $model.volume, in: 0...1).frame(width: 180)
+                        .accessibilityLabel("Tone volume")
+                }
+                GridRow {
+                    Text("Voice")
+                    Slider(value: $model.voiceVolume, in: 0...1).frame(width: 180)
+                        .accessibilityLabel("Voice volume")
+                }
+            }
+        } else {
+            HStack(spacing: 10) {
+                Image(systemName: "speaker.fill")
+                Slider(value: $model.volume, in: 0...1).frame(width: 180)
+                Image(systemName: "speaker.wave.3.fill")
+            }
+        }
+    }
+
+    /// The volume button shows how loud it is, as the menu bar's speaker does: the louder of
+    /// the two with the voice on.
     private var volumeSymbol: String {
-        switch model.volume {
+        switch model.voiceOn ? max(model.volume, model.voiceVolume) : model.volume {
         case ..<0.01: return "speaker.fill"
         case ..<0.34: return "speaker.wave.1.fill"
         case ..<0.67: return "speaker.wave.2.fill"

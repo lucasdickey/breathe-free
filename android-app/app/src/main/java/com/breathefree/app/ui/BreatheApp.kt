@@ -479,9 +479,11 @@ private fun SessionScreen(
                     if (paused) Icons.play(this, color) else Icons.pause(this, color)
                 }
                 Spacer(Modifier.width(10.dp))
-                // How loud, as on the Mac; which sound plays is chosen on the home screen.
-                RoundIconButton("Volume, ${(controller.volume * 100).roundToInt()}%", { volumeOpen = !volumeOpen }) { color ->
-                    Icons.volume(this, color, controller.volume)
+                // How loud, as on the Mac; which sound plays is chosen on the home screen. With
+                // the voice on, the tone and the voice each have their own.
+                val voiceLevel = if (controller.voiceOn) controller.voiceVolume else null
+                RoundIconButton(volumeDescription(controller.volume, voiceLevel), { volumeOpen = !volumeOpen }) { color ->
+                    Icons.volume(this, color, maxOf(controller.volume, voiceLevel ?: 0f))
                 }
             }
         }
@@ -524,6 +526,8 @@ private fun SessionScreen(
             VolumePanel(
                 controller.volume,
                 onChange = controller::chooseVolume,
+                voice = if (controller.voiceOn) controller.voiceVolume else null,
+                onVoiceChange = controller::chooseVoiceVolume,
                 onLeftAlone = { volumeOpen = false },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -542,12 +546,26 @@ private const val END_READY_MS = 300L
 /** How long the volume slider stays open once it is left alone. */
 private const val VOLUME_OPEN_MS = 3_500L
 
+/** What the speaker says it is: how loud, and with the voice on, the tone and the voice apart. */
+private fun volumeDescription(tone: Float, voice: Float?): String {
+    fun percent(v: Float) = "${(v * 100).roundToInt()}%"
+    return if (voice == null) "Volume, ${percent(tone)}" else "Volume, tone ${percent(tone)}, voice ${percent(voice)}"
+}
+
 /**
- * The volume slider, as on the Mac: quiet at the left, loud at the right. It closes itself
+ * The volume slider, as on the Mac: quiet at the left, loud at the right. With the voice on
+ * there are two, named: the tone's (pad, air and bells) and the voice's. It closes itself
  * when left alone for a few seconds; every touch starts the wait again.
  */
 @Composable
-private fun VolumePanel(level: Float, onChange: (Float) -> Unit, onLeftAlone: () -> Unit, modifier: Modifier = Modifier) {
+private fun VolumePanel(
+    level: Float,
+    onChange: (Float) -> Unit,
+    voice: Float?,
+    onVoiceChange: (Float) -> Unit,
+    onLeftAlone: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val ink = LocalInk.current
     var touches by remember { mutableIntStateOf(0) }
     val leftAlone by rememberUpdatedState(onLeftAlone)
@@ -556,30 +574,50 @@ private fun VolumePanel(level: Float, onChange: (Float) -> Unit, onLeftAlone: ()
         leftAlone()
     }
     val shape = RoundedCornerShape(22.dp)
-    Row(
-        modifier
-            .clip(shape)
-            .background(ink.field)
-            .border(1.dp, ink.fieldBorder, shape)
-            .padding(horizontal = 14.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Canvas(Modifier.size(18.dp)) { Icons.quiet(this, ink.soft) }
-        VolumeSlider(
-            level,
-            onChange = {
-                touches++
-                onChange(it)
-            },
-            modifier = Modifier.padding(horizontal = 8.dp).width(180.dp),
-        )
-        Canvas(Modifier.size(18.dp)) { Icons.volume(this, ink.soft, 1f) }
+    val panel = modifier
+        .clip(shape)
+        .background(ink.field)
+        .border(1.dp, ink.fieldBorder, shape)
+    if (voice == null) {
+        Row(panel.padding(horizontal = 14.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Canvas(Modifier.size(18.dp)) { Icons.quiet(this, ink.soft) }
+            VolumeSlider(
+                level,
+                onChange = {
+                    touches++
+                    onChange(it)
+                },
+                modifier = Modifier.padding(horizontal = 8.dp).width(180.dp),
+            )
+            Canvas(Modifier.size(18.dp)) { Icons.volume(this, ink.soft, 1f) }
+        }
+    } else {
+        Column(panel.padding(start = 18.dp, end = 14.dp, top = 6.dp, bottom = 6.dp)) {
+            for ((name, value, change) in listOf(Triple("Tone", level, onChange), Triple("Voice", voice, onVoiceChange))) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    BasicText(
+                        name,
+                        Modifier.width(52.dp).clearAndSetSemantics { },
+                        style = TextStyle(color = ink.soft, fontSize = 14.sp),
+                    )
+                    VolumeSlider(
+                        value,
+                        onChange = {
+                            touches++
+                            change(it)
+                        },
+                        modifier = Modifier.width(180.dp),
+                        description = "$name volume",
+                    )
+                }
+            }
+        }
     }
 }
 
 /** A slider from 0 to 1: drag along it or tap where you want it; TalkBack can set it too. */
 @Composable
-private fun VolumeSlider(value: Float, onChange: (Float) -> Unit, modifier: Modifier = Modifier) {
+private fun VolumeSlider(value: Float, onChange: (Float) -> Unit, modifier: Modifier = Modifier, description: String = "Volume") {
     val ink = LocalInk.current
     val change by rememberUpdatedState(onChange)
     val thumb = 9.dp
@@ -596,7 +634,7 @@ private fun VolumeSlider(value: Float, onChange: (Float) -> Unit, modifier: Modi
                 detectHorizontalDragGestures(onDragStart = { change(at(it.x)) }) { c, _ -> change(at(c.position.x)) }
             }
             .semantics {
-                contentDescription = "Volume"
+                contentDescription = description
                 progressBarRangeInfo = ProgressBarRangeInfo(value, 0f..1f)
                 setProgress { change(it.coerceIn(0f, 1f)); true }
             },

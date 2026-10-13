@@ -35,7 +35,8 @@ import java.time.ZonedDateTime
 /**
  * The speaker in a session sets how loud it is, with a slider that floats under it, as on the
  * Mac. Opening the slider moves nothing in the top bar (the sound-type label it replaces made
- * the bar jump), and the sound itself stays as chosen on the home screen.
+ * the bar jump), and the sound itself stays as chosen on the home screen. With the voice on,
+ * the tone and the voice each have a slider.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -102,6 +103,44 @@ class VolumeTest {
         compose.onNodeWithContentDescription("Volume, 40%").assertIsDisplayed()
         // Kept for next time.
         assertEquals(0.4f, BreatheController(context).volume, 1e-6f)
+    }
+
+    @Test
+    fun withTheVoiceOnTheToneAndTheVoiceEachHaveASlider() {
+        compose.mainClock.autoAdvance = false
+        // A tone volume chosen before the voice had one of its own: the voice starts there.
+        BreatheController(context, loadVoice = { null }).chooseVolume(0.6f)
+        val controller = BreatheController(context, loadVoice = { null }) { nanos() }
+        assertEquals(0.6f, controller.voiceVolume, 1e-6f)
+        controller.chooseVoice(true)
+        controller.chooseCycles(2)
+        controller.chooseSound(SoundMode.SILENT) // and no clips: no audio thread under the test clock
+        compose.setContent { BreatheApp(controller) { noon } }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.runOnUiThread { controller.begin() }
+        compose.mainClock.advanceTimeBy(5_000)
+
+        compose.onNodeWithContentDescription("Volume, tone 60%, voice 60%").performClick()
+        compose.mainClock.advanceTimeBy(200)
+        val tone = compose.onNodeWithContentDescription("Tone volume")
+        val voice = compose.onNodeWithContentDescription("Voice volume")
+        tone.assertIsDisplayed()
+        voice.assertIsDisplayed()
+        // Each moves only its own.
+        voice.performSemanticsAction(SemanticsActions.SetProgress) { it(0.3f) }
+        compose.mainClock.advanceTimeBy(100)
+        assertEquals(0.3f, controller.voiceVolume, 1e-6f)
+        assertEquals(0.6f, controller.volume, 1e-6f)
+        tone.performSemanticsAction(SemanticsActions.SetProgress) { it(0.8f) }
+        compose.mainClock.advanceTimeBy(100)
+        assertEquals(0.8f, controller.volume, 1e-6f)
+        assertEquals(0.3f, controller.voiceVolume, 1e-6f)
+        compose.onNodeWithContentDescription("Volume, tone 80%, voice 30%").assertIsDisplayed()
+
+        // Each is kept for next time.
+        val next = BreatheController(context, loadVoice = { null })
+        assertEquals(0.3f, next.voiceVolume, 1e-6f)
+        assertEquals(0.8f, next.volume, 1e-6f)
     }
 
     @Test

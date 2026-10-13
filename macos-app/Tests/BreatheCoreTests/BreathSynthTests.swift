@@ -199,13 +199,37 @@ final class BreathSynthTests: XCTestCase {
         XCTAssertEqual(rms(voiced.left, 5.0, 7.5) / rms(plain.left, 5.0, 7.5), 0.562, accuracy: 0.003)
     }
 
-    func testTheVolumeTurnsTheVoiceDownToo() {
+    func testTheVoiceHasAVolumeOfItsOwn() {
         let plan = SessionPlan(cycles: 2)
         let full = render(plan, mode: .silent, seconds: 9, voice: prompts)
-        let half = render(plan, mode: .silent, seconds: 9, voice: prompts) { $0.volume = 0.5 }
+        let half = render(plan, mode: .silent, seconds: 9, voice: prompts) { $0.voiceVolume = 0.5 }
         // The slider is squared, as for everything else: half way is a quarter of the level.
         let peak = { (x: [Float]) in x.map { abs(Double($0)) }.max()! }
         XCTAssertEqual(peak(half.left) / peak(full.left), 0.25, accuracy: 0.01)
+        // The tone's volume leaves the voice alone.
+        let toneDown = render(plan, mode: .silent, seconds: 9, voice: prompts) { $0.volume = 0.5 }
+        XCTAssertEqual(peak(toneDown.left) / peak(full.left), 1.0, accuracy: 1e-9)
+    }
+
+    func testTheVoiceVolumeLeavesTheToneAlone() {
+        // Ambient into the first hold. Outside the prompts ("in" from 7.85 s for 0.40 s, "hold"
+        // from 11.9 s) only the tone plays, and turning the voice down changes none of it.
+        let plan = SessionPlan(cycles: 2)
+        let full = render(plan, seconds: 12.5, voice: prompts)
+        let quiet = render(plan, seconds: 12.5, voice: prompts) { $0.voiceVolume = 0.2 }
+        let spoken: [(Double, Double)] = [(7.85, 8.25), (11.9, 12.15)]
+        var differ = false
+        for i in 0..<full.left.count {
+            let t = Double(i) / rate
+            if spoken.contains(where: { t >= $0.0 - 0.001 && t < $0.1 + 0.001 }) {
+                differ = differ || full.left[i] != quiet.left[i]
+                continue
+            }
+            XCTAssertEqual(full.left[i], quiet.left[i], "sample \(i)")
+            XCTAssertEqual(full.right[i], quiet.right[i], "sample \(i)")
+        }
+        // While a prompt plays, the difference is the voice turned down.
+        XCTAssertTrue(differ)
     }
 
     func testASessionWithItsVoiceStaysInsideFullScale() {
