@@ -50,7 +50,7 @@ resolution; the JavaScript one differs by at most the smallest 16-bit step on ab
 
 ## A recorded voice
 
-"Speak each change", a switch on the home screen, says each change aloud in Lucas's own
+"Voice guidance", a switch on the home screen, says each change aloud in Lucas's own
 voice: "Breathe in", "Hold" and "Breathe out". It plays over Ambient or Bells, or alone
 with Silent. The voice and the tone (pad, air and bells) each have a volume: in a session
 the speaker opens a slider for each, and on the Mac's home screen the voice's sits under

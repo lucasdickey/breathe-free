@@ -271,7 +271,7 @@ private fun HomeScreen(controller: BreatheController, frameNanos: State<Long>) {
                 onSelect = { controller.chooseSound(modes[it]) },
             )
             Spacer(Modifier.height(14.dp))
-            SwitchRow("Speak each change", controller.voiceOn, controller::chooseVoice)
+            SwitchRow("Voice guidance", controller.voiceOn, controller::chooseVoice)
             SwitchRow("Vibrate at each change", controller.hapticsOn, controller::chooseHaptics)
 
             Spacer(Modifier.height(32.dp))

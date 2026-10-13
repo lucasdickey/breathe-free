@@ -27,7 +27,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * "Speak each change" on the home screen: off until chosen, kept for next time, and the
+ * "Voice guidance" on the home screen: off until chosen, kept for next time, and the
  * prompts are decoded once, off the main thread, as soon as it is switched on.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -59,7 +59,7 @@ class VoiceSwitchTest {
         compose.mainClock.autoAdvance = false // the orb and the sky never stop moving
         compose.setContent { BreatheApp(controller) { noon } }
         compose.mainClock.advanceTimeBy(500)
-        val row = compose.onNodeWithText("Speak each change")
+        val row = compose.onNodeWithText("Voice guidance")
         row.assert(switchState(false))
         assertFalse(controller.voiceOn)
         assertEquals("nothing decoded while it is off", 0, decoded.get())
