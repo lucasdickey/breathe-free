@@ -12,6 +12,8 @@
 		AA00002A0000000000000001 /* BreathTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00002B0000000000000001 /* BreathTimeline.swift */; };
 		AA0000400000000000000001 /* DaySky.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000410000000000000001 /* DaySky.swift */; };
 		AA0000420000000000000001 /* LiquidPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000430000000000000001 /* LiquidPicker.swift */; };
+		AA0000440000000000000001 /* VoiceClips.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000450000000000000001 /* VoiceClips.swift */; };
+		AA0000460000000000000001 /* VoiceLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000470000000000000001 /* VoiceLoader.swift */; };
 		AA00002C0000000000000001 /* BreathSynth.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00002D0000000000000001 /* BreathSynth.swift */; };
 		AA00002E0000000000000001 /* SessionAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00002F0000000000000001 /* SessionAudio.swift */; };
 		AA0000300000000000000001 /* SessionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000310000000000000001 /* SessionModel.swift */; };
@@ -23,6 +25,9 @@
 		AA00003A0000000000000001 /* SessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00003B0000000000000001 /* SessionView.swift */; };
 		AA00003C0000000000000001 /* DoneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00003D0000000000000001 /* DoneView.swift */; };
 		AA0000130000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA0000140000000000000001 /* Assets.xcassets */; };
+		AA0000480000000000000001 /* breathe-in.m4a in Resources */ = {isa = PBXBuildFile; fileRef = AA0000490000000000000001 /* breathe-in.m4a */; };
+		AA00004A0000000000000001 /* hold.m4a in Resources */ = {isa = PBXBuildFile; fileRef = AA00004B0000000000000001 /* hold.m4a */; };
+		AA00004C0000000000000001 /* breathe-out.m4a in Resources */ = {isa = PBXBuildFile; fileRef = AA00004D0000000000000001 /* breathe-out.m4a */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +37,8 @@
 		AA00002B0000000000000001 /* BreathTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreathTimeline.swift; sourceTree = "<group>"; };
 		AA0000410000000000000001 /* DaySky.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaySky.swift; sourceTree = "<group>"; };
 		AA0000430000000000000001 /* LiquidPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidPicker.swift; sourceTree = "<group>"; };
+		AA0000450000000000000001 /* VoiceClips.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceClips.swift; sourceTree = "<group>"; };
+		AA0000470000000000000001 /* VoiceLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceLoader.swift; sourceTree = "<group>"; };
 		AA00002D0000000000000001 /* BreathSynth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreathSynth.swift; sourceTree = "<group>"; };
 		AA00002F0000000000000001 /* SessionAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAudio.swift; sourceTree = "<group>"; };
 		AA0000310000000000000001 /* SessionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionModel.swift; sourceTree = "<group>"; };
@@ -43,6 +50,9 @@
 		AA00003B0000000000000001 /* SessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionView.swift; sourceTree = "<group>"; };
 		AA00003D0000000000000001 /* DoneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoneView.swift; sourceTree = "<group>"; };
 		AA0000140000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AA0000490000000000000001 /* breathe-in.m4a */ = {isa = PBXFileReference; lastKnownFileType = file; path = "breathe-in.m4a"; sourceTree = "<group>"; };
+		AA00004B0000000000000001 /* hold.m4a */ = {isa = PBXFileReference; lastKnownFileType = file; path = hold.m4a; sourceTree = "<group>"; };
+		AA00004D0000000000000001 /* breathe-out.m4a */ = {isa = PBXFileReference; lastKnownFileType = file; path = "breathe-out.m4a"; sourceTree = "<group>"; };
 		AA0000170000000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA0000180000000000000001 /* BreatheFree.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BreatheFree.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -75,6 +85,7 @@
 				AA00001F0000000000000001 /* Audio */,
 				AA00001D0000000000000001 /* Models */,
 				AA00001E0000000000000001 /* Views */,
+				AA00004E0000000000000001 /* Voice */,
 				AA0000140000000000000001 /* Assets.xcassets */,
 				AA0000170000000000000001 /* Info.plist */,
 				AA0000180000000000000001 /* BreatheFree.entitlements */,
@@ -116,6 +127,7 @@
 			isa = PBXGroup;
 			children = (
 				AA00002F0000000000000001 /* SessionAudio.swift */,
+				AA0000470000000000000001 /* VoiceLoader.swift */,
 			);
 			path = Audio;
 			sourceTree = "<group>";
@@ -127,8 +139,19 @@
 				AA00002D0000000000000001 /* BreathSynth.swift */,
 				AA0000410000000000000001 /* DaySky.swift */,
 				AA0000430000000000000001 /* LiquidPicker.swift */,
+				AA0000450000000000000001 /* VoiceClips.swift */,
 			);
 			path = Core;
+			sourceTree = "<group>";
+		};
+		AA00004E0000000000000001 /* Voice */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000490000000000000001 /* breathe-in.m4a */,
+				AA00004B0000000000000001 /* hold.m4a */,
+				AA00004D0000000000000001 /* breathe-out.m4a */,
+			);
+			path = Voice;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -190,6 +213,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA0000130000000000000001 /* Assets.xcassets in Resources */,
+				AA0000480000000000000001 /* breathe-in.m4a in Resources */,
+				AA00004A0000000000000001 /* hold.m4a in Resources */,
+				AA00004C0000000000000001 /* breathe-out.m4a in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -206,6 +232,8 @@
 				AA0000400000000000000001 /* DaySky.swift in Sources */,
 				AA0000420000000000000001 /* LiquidPicker.swift in Sources */,
 				AA00002C0000000000000001 /* BreathSynth.swift in Sources */,
+				AA0000440000000000000001 /* VoiceClips.swift in Sources */,
+				AA0000460000000000000001 /* VoiceLoader.swift in Sources */,
 				AA00002E0000000000000001 /* SessionAudio.swift in Sources */,
 				AA0000300000000000000001 /* SessionModel.swift in Sources */,
 				AA00000B0000000000000001 /* HapticManager.swift in Sources */,

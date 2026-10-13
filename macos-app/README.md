@@ -23,6 +23,11 @@ hold for four, with an eight-second settle at the start.
     quieter high and low notes for the holds.
 - **Sound modes**: Ambient, Bells only, or Silent, chosen before a session, plus a
   volume slider. In a session, the speaker sets how loud it is.
+- **Speak each change**: says "Breathe in", "Hold" and "Breathe out" in Lucas's voice,
+  each main vowel on its change, over Ambient or Bells or alone with Silent. The prompts
+  are AAC in `BreatheFree/Voice`, decoded once off the main thread (`Audio/VoiceLoader.swift`,
+  `Core/VoiceClips.swift`) and mixed in by the synth on its own clock (see
+  `../voice/README.md`).
 - The Force Touch trackpad taps at each change if a finger is resting on it.
 
 Keys: **Return** begins, **Space** pauses, and **Escape** pressed twice ends a session (the

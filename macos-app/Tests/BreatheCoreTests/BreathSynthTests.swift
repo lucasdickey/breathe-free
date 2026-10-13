@@ -6,9 +6,9 @@ final class BreathSynthTests: XCTestCase {
 
     /// Renders a whole session with exact timing, in blocks of `block` frames.
     private func render(_ plan: SessionPlan, mode: SoundMode = .ambient, block: Int = 480,
-                        seconds: Double? = nil, solo: Int = -1,
+                        seconds: Double? = nil, solo: Int = -1, voice: [VoicePrompt?]? = nil,
                         configure: (BreathSynth) -> Void = { _ in }) -> (left: [Float], right: [Float]) {
-        let synth = BreathSynth(sampleRate: rate, plan: plan)
+        let synth = BreathSynth(sampleRate: rate, plan: plan, voice: voice)
         synth.mode = mode
         synth.volume = 1
         synth.solo = solo
@@ -117,6 +117,122 @@ final class BreathSynthTests: XCTestCase {
         while !synth.finished && blocks < 1000 { synth.render(left: &l, right: &r, frames: 480, startTime: Double(n) / rate); n += 480; blocks += 1 }
         XCTAssertTrue(synth.finished)
         XCTAssertLessThan(blocks, 60)
+    }
+
+    // MARK: - Voice. Stand-in prompts: a steady tone each, of a different length per phase,
+    // so each phase's prompt can be told apart and timed to the sample.
+
+    private func tone(_ seconds: Double, lead: Double, level: Double = 0.2) -> VoicePrompt {
+        let n = Int(seconds * rate)
+        return VoicePrompt(samples: (0..<n).map { Float(level * cos(2 * Double.pi * 300 * Double($0) / rate)) }, lead: lead)
+    }
+
+    private lazy var hold = tone(0.25, lead: 0.10)
+    private lazy var prompts: [VoicePrompt?] = [tone(0.40, lead: 0.15), hold, tone(0.35, lead: 0.05), hold]
+
+    /// The runs of sound in `x`: (first sample, length), gaps under 5 ms joined.
+    private func soundRuns(_ x: [Float]) -> [(start: Int, length: Int)] {
+        var runs: [(start: Int, length: Int)] = []
+        var start = -1
+        var last = -1
+        for i in x.indices where x[i] != 0 {
+            if start < 0 || i - last > Int(rate) / 200 {
+                if start >= 0 { runs.append((start, last - start + 1)) }
+                start = i
+            }
+            last = i
+        }
+        if start >= 0 { runs.append((start, last - start + 1)) }
+        return runs
+    }
+
+    func testEachPromptStartsItsLeadBeforeItsChange() {
+        // Silent, so the voice is all there is: one run of sound per phase, starting on the
+        // sample nearest (change - lead), as long as that phase's prompt.
+        let plan = SessionPlan(cycles: 2)
+        let runs = soundRuns(render(plan, mode: .silent, block: 333, voice: prompts).left)
+        XCTAssertEqual(runs.count, plan.phaseCount)
+        for (i, run) in runs.enumerated() {
+            let p = prompts[i % 4]!
+            let due = Int(((plan.phaseStart(i) - p.lead) * rate).rounded())
+            XCTAssertLessThanOrEqual(abs(run.start - due), 1, "phase \(i)")
+            XCTAssertEqual(run.length, p.samples.count, "phase \(i) plays its own prompt")
+        }
+    }
+
+    func testAPromptIsNeverJoinedPartWay() {
+        // Carrying on after a pause starts a new synth part way through the session. A prompt
+        // already 0.1 s under way is let go; one only 20 ms under way still plays, from its start.
+        let plan = SessionPlan(cycles: 2)
+        let due = plan.phaseStart(1) - hold.lead
+        func soundFrom(_ start: Double) -> [(start: Int, length: Int)] {
+            let synth = BreathSynth(sampleRate: rate, plan: plan, voice: prompts)
+            synth.mode = .silent
+            let total = Int(rate) * 2
+            var l = [Float](repeating: 0, count: total), r = l
+            l.withUnsafeMutableBufferPointer { lp in
+                r.withUnsafeMutableBufferPointer { rp in
+                    var n = 0
+                    while n < total {
+                        synth.render(left: lp.baseAddress! + n, right: rp.baseAddress! + n, frames: 480,
+                                     startTime: start + Double(n) / rate)
+                        n += 480
+                    }
+                }
+            }
+            return soundRuns(l)
+        }
+        let late = soundFrom(due + 0.1)
+        XCTAssertTrue(late.allSatisfy { Double($0.start) > 0.5 * rate }, "a prompt joined part way")
+        // From its first sample to its last (the very first is silent: joining part way, the
+        // sound fades in from nothing).
+        let justLate = soundFrom(due + 0.02)
+        XCTAssertLessThanOrEqual(justLate[0].start, 1)
+        XCTAssertEqual(justLate[0].start + justLate[0].length, hold.samples.count)
+    }
+
+    func testUnderAVoiceTheRestPlaysFiveDecibelsQuieter() {
+        // Before the first prompt (it is due at 7.85 s), compare the pad with and without.
+        let plan = SessionPlan(cycles: 2)
+        let plain = render(plan, seconds: 7.6)
+        let voiced = render(plan, seconds: 7.6, voice: prompts)
+        XCTAssertEqual(rms(voiced.left, 5.0, 7.5) / rms(plain.left, 5.0, 7.5), 0.562, accuracy: 0.003)
+    }
+
+    func testTheVolumeTurnsTheVoiceDownToo() {
+        let plan = SessionPlan(cycles: 2)
+        let full = render(plan, mode: .silent, seconds: 9, voice: prompts)
+        let half = render(plan, mode: .silent, seconds: 9, voice: prompts) { $0.volume = 0.5 }
+        // The slider is squared, as for everything else: half way is a quarter of the level.
+        let peak = { (x: [Float]) in x.map { abs(Double($0)) }.max()! }
+        XCTAssertEqual(peak(half.left) / peak(full.left), 0.25, accuracy: 0.01)
+    }
+
+    func testASessionWithItsVoiceStaysInsideFullScale() {
+        // Prompts as loud as the real ones (peaks near 0.5 at -20 LUFS), faded in and out as
+        // they are, over the full pad: nothing past full scale, nothing broken.
+        func shaped(_ seconds: Double, lead: Double) -> VoicePrompt {
+            let n = Int(seconds * rate)
+            return VoicePrompt(samples: (0..<n).map {
+                let t = Double($0) / rate
+                let env = min(1, t / 0.01, (seconds - t) / 0.04)
+                return Float(0.5 * env * sin(2 * Double.pi * 140 * t) * (0.6 + 0.4 * sin(2 * Double.pi * 7 * t)))
+            }, lead: lead)
+        }
+        let h = shaped(0.85, lead: 0.167)
+        let out = render(SessionPlan(cycles: 2), voice: [shaped(1.03, lead: 0.164), h, shaped(0.91, lead: 0.029), h])
+        let all = out.left + out.right
+        XCTAssertTrue(all.allSatisfy { $0.isFinite })
+        XCTAssertLessThan(all.map { abs(Double($0)) }.max()!, 1.0)
+    }
+
+    func testBlockSizeDoesNotChangeTheVoice() {
+        let plan = SessionPlan(cycles: 2)
+        let a = render(plan, block: 256, seconds: 30, voice: prompts)
+        let b = render(plan, block: 997, seconds: 30, voice: prompts)
+        var worst = 0.0
+        for i in a.left.indices { worst = max(worst, abs(Double(a.left[i] - b.left[i]))) }
+        XCTAssertLessThan(worst, 1e-5)
     }
 
     /// Writes raw little-endian float32 stereo (interleaved) for comparison with the

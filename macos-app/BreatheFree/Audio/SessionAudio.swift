@@ -42,15 +42,16 @@ final class SessionAudio {
         }
     }
 
-    /// Returns nil if there is no audio output to play on.
-    init?(plan: SessionPlan, startTime: CFTimeInterval, mode: SoundMode, volume: Double) {
+    /// Returns nil if there is no audio output to play on. `voice`, if given, is spoken at
+    /// each change (see BreathSynth).
+    init?(plan: SessionPlan, startTime: CFTimeInterval, mode: SoundMode, volume: Double, voice: VoiceClips? = nil) {
         let engine = AVAudioEngine()
         let output = engine.outputNode
         let hardwareRate = output.outputFormat(forBus: 0).sampleRate
         let sampleRate = hardwareRate > 0 ? hardwareRate : 48_000
         guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2) else { return nil }
 
-        let synth = BreathSynth(sampleRate: sampleRate, plan: plan)
+        let synth = BreathSynth(sampleRate: sampleRate, plan: plan, voice: voice?.prompts(sampleRate: sampleRate))
         synth.mode = mode
         synth.volume = volume
         let timing = Timing(startTime: startTime, latency: output.presentationLatency)

@@ -28,6 +28,14 @@ final class SessionModel: ObservableObject {
         }
     }
 
+    /// Say each change aloud ("Breathe in", "Hold", "Breathe out"). Off until chosen.
+    @Published var voiceOn: Bool {
+        didSet {
+            defaults.set(voiceOn, forKey: Keys.voice)
+            if voiceOn { prepareVoice() }
+        }
+    }
+
     @Published private(set) var screen: Screen = .home
     @Published private(set) var session: ActiveSession?
 
@@ -36,12 +44,20 @@ final class SessionModel: ObservableObject {
     private var ticker: Timer?
     private var lastPhaseIndex = Int.min
 
+    // The prompts, decoded once off the main thread: written before the group is left, read
+    // only after waiting on it.
+    private let voiceLoading = DispatchGroup()
+    private var voiceRequested = false
+    private var voiceClips: VoiceClips?
+
     init() {
         let defaults = UserDefaults.standard
         let saved = defaults.integer(forKey: Keys.cycles)
         cycles = SessionPlan.cycleChoices.contains(saved) ? saved : SessionPlan.defaultCycles
         soundMode = SoundMode(rawValue: defaults.string(forKey: Keys.sound) ?? "") ?? .ambient
         volume = defaults.object(forKey: Keys.volume) as? Double ?? 0.85
+        voiceOn = defaults.bool(forKey: Keys.voice)
+        if voiceOn { prepareVoice() }
     }
 
     func begin() {
@@ -94,8 +110,31 @@ final class SessionModel: ObservableObject {
     // MARK: - Private
 
     private func startAudio(for active: ActiveSession, mode: SoundMode) {
-        guard mode != .silent else { return }
-        audio = SessionAudio(plan: active.plan, startTime: active.startTime, mode: mode, volume: volume)
+        let voice = voiceForSession()
+        // Silent with the voice on still plays: the voice alone.
+        guard mode != .silent || voice != nil else { return }
+        audio = SessionAudio(plan: active.plan, startTime: active.startTime, mode: mode, volume: volume, voice: voice)
+    }
+
+    /// Decodes the prompts once, off the main thread, so they're ready well before Begin.
+    private func prepareVoice() {
+        guard !voiceRequested else { return }
+        voiceRequested = true
+        voiceLoading.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            self.voiceClips = VoiceLoader.load()
+            self.voiceLoading.leave()
+        }
+    }
+
+    /// The prompts for a session starting now, or nil to play it without a voice.
+    private func voiceForSession() -> VoiceClips? {
+        guard voiceOn else { return nil }
+        prepareVoice()
+        // Decoding takes a few milliseconds and starts when the voice is chosen, so this only
+        // waits if Begin comes straight after switching it on.
+        guard voiceLoading.wait(timeout: .now() + 1.5) == .success else { return nil }
+        return voiceClips
     }
 
     private func stopAudio() {
@@ -141,5 +180,6 @@ final class SessionModel: ObservableObject {
         static let cycles = "cycles"
         static let sound = "sound"
         static let volume = "volume"
+        static let voice = "voice"
     }
 }
