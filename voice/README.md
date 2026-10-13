@@ -6,8 +6,10 @@ else is generated as it plays (see the top-level README).
 
 ## The clips
 
-`masters/` holds the three clips as cut and cleaned, 48 kHz mono 16-bit, each at -20 LUFS.
-The apps carry them as AAC at 64 kbit/s (`ffmpeg -c:a aac -b:a 64k`), about 9 KB each:
+`cut/` holds the three takes as cut and cleaned, 48 kHz mono 16-bit, each at -20 LUFS, and
+`masters/` the same takes with the stop that ends "Hold" and "Breathe out" rounded off (step 4
+below). The apps carry the masters as AAC at 64 kbit/s
+(`ffmpeg -i <master> -c:a aac -b:a 64k -movflags +faststart <clip>.m4a`), about 9 KB each:
 
 | Clip | Length | Lead | In the apps |
 |------|--------|------|-------------|
@@ -35,16 +37,23 @@ From a 22-second phone recording (a voice memo, AAC, 48 kHz) of nine takes: four
    out) and forward for the fading end and the "t" of "out" (until 80 ms within 6 dB of the
    room's noise). 8 ms fade in, 40 ms fade out.
 3. `tools/voice_process.py`: a gentle low cut below 70 Hz (most of the room's noise was
-   rumble below it), then each take brought to -20 LUFS.
-4. `tools/voice_soft_t.py`: the "t" at the end of "Breathe out" was released as a sharp
-   spike after a moment of silence, which popped. From just before it the take is 14 dB
-   quieter, and the spike's edge is a 4 ms ramp, so a faint "ts" is left.
+   rumble below it), then each take brought to -20 LUFS. The chosen takes, as they come
+   out of this step, are `cut/`.
+4. `tools/voice_round_stops.py`: "Hold" ends in a "d" and "Breathe out" in a "t", and each
+   was released as a sharp, bright burst after a moment of silence, which popped (the "d"
+   most, in the quiet hold after breathing out). Each stop is kept but rounded off: from
+   10 ms before its release the take is 12 dB quieter, its treble is softened above 3 kHz,
+   and it swells in over 30 ms instead of starting at once. In the session's own mix, in
+   the treble where a click is heard, the "d" went from 32 dB above what plays under it to
+   4 dB in the first hold (from 49 to 20 in the second, where almost nothing plays up
+   there), and the "t" from 8 dB to 3 dB; each now swells in rather than jumping. Everything before the closure is untouched, so the leads hold.
+   (`voice_round_stops.py cut/hold.wav masters/hold.wav`, the same for `breathe-out.wav`;
+   "Breathe in" ends without a stop, so its master is its cut take.)
 5. `tools/voice_preview.py`: mixes the clips over a rendered session, each on its change,
    to listen to before changing the apps. `VoicePreviewTest` in the Android app does the
    same through the app's own synth.
 
-The scripts read their input as arguments and write next to it; each says how to run it
-at the top. A new recording goes through the same steps, with its own leads measured as
+The scripts read their input and output as arguments; each says how to run it at the top. A new recording goes through the same steps, with its own leads measured as
 above.
 
 ## How loud
