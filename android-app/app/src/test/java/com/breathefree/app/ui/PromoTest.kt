@@ -11,6 +11,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -46,6 +47,9 @@ import kotlin.math.roundToLong
  * Another timeline in promo/ can be given with -PpromoScript=<file> (frames go to
  * build/promo/android-<name>). One whose Begin is at 0 starts with the session already under
  * way, with no taps: the 10-second spot (sun.json) is drawn that way.
+ *
+ * A timeline can also ask for a still of the settings fan open (fanStill), which goes to
+ * build/promo/android-stills: the download page shows it beside the frames.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -86,29 +90,9 @@ class PromoTest {
         // Voice guidance on, as the app starts.
         controller.chooseVoice(true)
 
-        // The sky's time of day eases from morning to night across the opening seconds.
-        fun hourAt(v: Double): Double {
-            val x = ((v - sweep.getDouble("start")) / (sweep.getDouble("end") - sweep.getDouble("start"))).coerceIn(0.0, 1.0)
-            val eased = x * x * (3 - 2 * x)
-            return sweep.getDouble("fromHour") + (sweep.getDouble("toHour") - sweep.getDouble("fromHour")) * eased
-        }
-        var hour = hourAt(0.0)
+        var hour = hourAt(sweep, 0.0)
         compose.setContent { BreatheApp(controller) { midnight.plusSeconds((hour * 3600).roundToLong()) } }
-
-        // Robolectric has no system bars. Give the app a phone's, a status bar with a camera hole
-        // and a gesture bar, so it lays itself out below them as it does on a device.
-        val density = context.resources.displayMetrics.density
-        val statusBar = (STATUS_BAR_DP * density).roundToInt()
-        val navigationBar = (NAVIGATION_BAR_DP * density).roundToInt()
-        val bars = WindowInsetsCompat.Builder()
-            .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.of(0, statusBar, 0, 0))
-            .setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 0, navigationBar))
-            .build()
-        compose.runOnIdle {
-            val content = compose.activity.findViewById<ViewGroup>(android.R.id.content)
-            ViewCompat.dispatchApplyWindowInsets(content.getChildAt(0), bars)
-        }
-        compose.mainClock.advanceTimeByFrame()
+        val (statusBar, navigationBar) = givePhoneBars(context)
 
         val events = JSONArray()
         fun tap(name: String, node: SemanticsNodeInteraction, v: Double) {
@@ -128,7 +112,7 @@ class PromoTest {
         val displayLeadMs = 2_000L / 60
         for (k in 0 until frames) {
             val v = k.toDouble() / fps
-            hour = hourAt(v)
+            hour = hourAt(sweep, v)
             val target = if (begun < 0) {
                 start + (v * 1000).roundToLong()
             } else {
@@ -163,6 +147,72 @@ class PromoTest {
         }
         File(out, "taps.json").writeText(events.toString(2))
         println("wrote $frames frames to ${out.absolutePath}")
+    }
+
+    /**
+     * A still for the download page, when the timeline asks for one with fanStill: the home
+     * screen at that moment (its sky, and session length as it is then) with the settings fan
+     * open, the sound and the voice on as in the frames, under the same phone's bars. Written to
+     * build/promo/android-stills/fan-open.jpg.
+     */
+    @Test
+    fun fanStill() {
+        val name = System.getProperty("promoScript").orEmpty().ifEmpty { "script.json" }
+        val script = JSONObject(File("../../promo/$name").readText())
+        assumeTrue("$name asks for no still of the settings fan", script.has("fanStill"))
+        val v = script.getDouble("fanStill")
+        val zone = ZoneId.of(script.getString("zone"))
+        val midnight = LocalDate.parse(script.getString("date")).atStartOfDay(zone)
+        val hour = hourAt(script.getJSONObject("sweep"), v)
+        val cycles = script.getJSONObject("cycles")
+        val picked = v >= script.getJSONObject("taps").getDouble("pick")
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        compose.mainClock.autoAdvance = false
+        val controller = BreatheController(context, loadVoice = { null }) { compose.mainClock.currentTime * 1_000_000L }
+        controller.chooseCycles(cycles.getInt(if (picked) "picked" else "before"))
+        controller.chooseSound(SoundMode.AMBIENT)
+        controller.chooseVoice(true)
+        compose.setContent { BreatheApp(controller) { midnight.plusSeconds((hour * 3600).roundToLong()) } }
+        givePhoneBars(context)
+
+        compose.mainClock.advanceTimeBy((v * 1000).roundToLong())
+        compose.onNodeWithContentDescription("Sound, voice and vibration").performClick()
+        // Long enough for the drops to come to rest.
+        compose.mainClock.advanceTimeBy(1_500)
+        compose.waitForIdle()
+        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
+        val file = File(File("build/promo/android-stills").apply { mkdirs() }, "fan-open.jpg")
+        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 93, it) }
+        println("wrote ${file.absolutePath}")
+    }
+
+    /** The sky's time of day, easing from morning to night across the opening seconds. */
+    private fun hourAt(sweep: JSONObject, v: Double): Double {
+        val x = ((v - sweep.getDouble("start")) / (sweep.getDouble("end") - sweep.getDouble("start"))).coerceIn(0.0, 1.0)
+        val eased = x * x * (3 - 2 * x)
+        return sweep.getDouble("fromHour") + (sweep.getDouble("toHour") - sweep.getDouble("fromHour")) * eased
+    }
+
+    /**
+     * Robolectric has no system bars. Gives the app a phone's, a status bar with a camera hole
+     * and a gesture bar, so it lays itself out below them as it does on a device. Returns their
+     * heights in pixels.
+     */
+    private fun givePhoneBars(context: Context): Pair<Int, Int> {
+        val density = context.resources.displayMetrics.density
+        val statusBar = (STATUS_BAR_DP * density).roundToInt()
+        val navigationBar = (NAVIGATION_BAR_DP * density).roundToInt()
+        val bars = WindowInsetsCompat.Builder()
+            .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.of(0, statusBar, 0, 0))
+            .setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 0, navigationBar))
+            .build()
+        compose.runOnIdle {
+            val content = compose.activity.findViewById<ViewGroup>(android.R.id.content)
+            ViewCompat.dispatchApplyWindowInsets(content.getChildAt(0), bars)
+        }
+        compose.mainClock.advanceTimeByFrame()
+        return statusBar to navigationBar
     }
 
     private companion object {

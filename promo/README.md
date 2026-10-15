@@ -42,6 +42,12 @@ runs at its true pace and every bell lands on its frame.
    Add `--stills=3.6,12.5` to draw just those moments as pictures beside the output, to
    check the look in seconds before a full encode.
 
+The download page's carousels (one-off.dev/breathe-free) are made from these frames too. For
+them, `fanStill` in `script.json` asks both renderers for one more picture: the home screen at
+that moment with the settings fan open, under the same sky and the same phone's bars or window
+as the frames. The Mac's is `fan-open.jpg` beside its frames; Android's is
+`app/build/promo/android-stills/fan-open.jpg`, from the same Gradle command as the frames.
+
 ## The 10-second time-of-day spot
 
 `sun.json` is a shorter timeline for an update: the session is already breathing while the

@@ -4,8 +4,9 @@
 //  Renders the Mac app's frames for the 30-second promo (promo/README.md), following
 //  promo/script.json: the home screen as the sky sweeps from morning to night, session length
 //  opened and a count picked, Begin, then a whole breathing cycle at its true pace. The app's
-//  own views draw every frame, with the media clock held at the frame's moment. Compiled
-//  together with the app's sources on a Mac:
+//  own views draw every frame, with the media clock held at the frame's moment. A timeline can
+//  also ask for a still of the settings fan open (fanStill), which goes beside the frames as
+//  fan-open.jpg for the download page. Compiled together with the app's sources on a Mac:
 //
 //    swiftc -parse-as-library -O -o render-promo macos-app/BreatheFree/{Core,Audio,Models,Views}/*.swift \
 //      macos-app/Promo/Promo.swift && ./render-promo promo/script.json <output folder>
@@ -45,6 +46,8 @@ private struct Script: Decodable {
     let cycles: Cycles
     let taps: Taps
     let session: Session
+    /// When to draw the still of the settings fan open, if the timeline wants one.
+    let fanStill: Double?
 }
 
 /// The sky for one moment, with its clouds and stars where they are at `time`.
@@ -90,6 +93,26 @@ struct Promo {
             return script.sweep.fromHour + (script.sweep.toHour - script.sweep.fromHour) * x * x * (3 - 2 * x)
         }
 
+        // Draws a scene in the window, in the ink for its sky, and writes it to the folder.
+        func write(_ scene: AnyView, look: DayLook, as name: String) {
+            let renderer = ImageRenderer(content: scene
+                .environment(\.ink, Ink.matching(look))
+                .frame(width: size.width, height: size.height))
+            renderer.scale = 1.25
+            guard let image = renderer.cgImage,
+                  let jpeg = NSBitmapImageRep(cgImage: image)
+                      .representation(using: .jpeg, properties: [.compressionFactor: 0.9]) else {
+                print("could not render \(name)")
+                exit(1)
+            }
+            do {
+                try jpeg.write(to: folder.appendingPathComponent(name))
+            } catch {
+                print("could not write \(name): \(error)")
+                exit(1)
+            }
+        }
+
         let model = SessionModel()
         model.soundMode = .ambient
         // The home screen shows Voice guidance on. This build has no prompts to load, and
@@ -126,25 +149,23 @@ struct Promo {
                         SessionView(model: model, session: session)
                     })
                 }
-                let renderer = ImageRenderer(content: scene
-                    .environment(\.ink, Ink.matching(look))
-                    .frame(width: size.width, height: size.height))
-                renderer.scale = 1.25
-                guard let image = renderer.cgImage,
-                      let jpeg = NSBitmapImageRep(cgImage: image)
-                          .representation(using: .jpeg, properties: [.compressionFactor: 0.9]) else {
-                    print("could not render frame \(k)")
-                    exit(1)
-                }
-                do {
-                    try jpeg.write(to: folder.appendingPathComponent(String(format: "f%05d.jpg", k)))
-                } catch {
-                    print("could not write frame \(k): \(error)")
-                    exit(1)
-                }
+                write(scene, look: look, as: String(format: "f%05d.jpg", k))
                 if k % 150 == 0 { print("frame \(k) of \(frames)") }
             }
         }
         print("wrote \(frames) frames to \(folder.path)")
+
+        // The still: the home screen at that moment, its sky and session length as they are
+        // then, with sound and voice fanned out of the corner, both on as in the frames.
+        if let v = script.fanStill {
+            MediaClock.fixed = v
+            model.cycles = v >= script.taps.pick ? script.cycles.picked : script.cycles.before
+            let look = DaySky.look(at: midnight.addingTimeInterval(hour(at: v) * 3600), in: zone)
+            write(AnyView(ZStack {
+                StillSky(sky: look.sky, time: v)
+                HomeView(model: model, settingsOpen: true)
+            }), look: look, as: "fan-open.jpg")
+            print("wrote the settings fan's still to \(folder.appendingPathComponent("fan-open.jpg").path)")
+        }
     }
 }
