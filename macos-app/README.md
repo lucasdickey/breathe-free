@@ -21,12 +21,13 @@ hold for four, with an eight-second settle at the start.
   - soft filtered "air" that only moves while breath moves,
   - a gentle bell exactly on each change: A for breathe in, D for breathe out,
     quieter high and low notes for the holds.
-- **Sound modes**: Ambient, Bells only, or Silent, chosen before a session. In a
+- **Sound modes**: Ambient, Bells only, or Silent, chosen before a session in the settings
+  fan, the round button at the top right of the home screen (or Command-comma). In a
   session, the speaker sets how loud it is.
 - **Voice guidance**: says "Breathe in", "Hold" and "Breathe out" in Lucas's voice,
-  each main vowel on its change, over Ambient or Bells or alone with Silent. It is
-  switched on or off before a session and has a volume of its own: in a session the
-  speaker then shows two sliders, Tone and Voice. The prompts
+  each main vowel on its change, over Ambient or Bells or alone with Silent. It is on from
+  the first start, switched off or on in the settings fan, and has a volume of its own: in
+  a session the speaker then shows two sliders, Tone and Voice. The prompts
   are AAC in `BreatheFree/Voice`, decoded once off the main thread (`Audio/VoiceLoader.swift`,
   `Core/VoiceClips.swift`) and mixed in by the synth on its own clock (see
   `../voice/README.md`).

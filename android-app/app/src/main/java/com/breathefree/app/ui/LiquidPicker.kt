@@ -2,7 +2,10 @@ package com.breathefree.app.ui
 
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.ceil
+import kotlin.math.cos
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -13,26 +16,45 @@ import kotlin.math.sqrt
  * Session length as liquid. When the picker opens, the other counts bud out of the chosen one
  * and pull free as drops; when one is picked, they all flow back into it. Drops run into one
  * another wherever they come close, as far as each drop's reach, and the reach eases to nothing
- * as a drop settles, so at rest they are plain circles. Kept in step with the Mac app's
- * LiquidPicker.swift.
+ * as a drop settles, so at rest they are plain circles. The settings fan (SettingsFan.kt) is
+ * the same liquid, its drops going out on a slant (LiquidFan). Kept in step with the Mac app's
+ * LiquidPicker.swift and the browser version's liquid.ts.
  */
 
-/** One drop of a row of liquid, centred on the row's line. */
+/** One drop of liquid. A row's drops sit on its line, which is the default. */
 data class LiquidDrop(
     /** Its centre along the row. */
     val x: Float,
     val radius: Float,
-    /** How far it is drawn out along the row as it moves; 1 is round. */
+    /** How far it is drawn out along the way it moves; 1 is round. */
     val stretch: Float = 1f,
-    /** How far it runs into the drops before it in the row. */
+    /** How far it runs into the drops before it. */
     val reach: Float = 0f,
+    /** Its centre below the row's line (0 on it). */
+    val y: Float = 0f,
+    /** The way it moves, in radians clockwise from along the row (0, the default). */
+    val angle: Float = 0f,
 ) {
     /** Distance from its edge, negative inside: exact when round, close when stretched. */
+    fun distance(px: Float, py: Float): Float = Shape(this).distance(px, py)
+}
+
+/** A drop ready to measure from: its centre, its half-lengths and the way it is drawn out. */
+private class Shape(d: LiquidDrop) {
+    val x = d.x
+    val y = d.y
+    val a = d.radius * d.stretch
+    val b = d.radius / d.stretch
+    val cos = cos(d.angle)
+    val sin = sin(d.angle)
+    val reach = d.reach
+
     fun distance(px: Float, py: Float): Float {
-        val a = radius * stretch
-        val b = radius / stretch
-        val dx = (px - x) / a
-        val dy = py / b
+        val ox = px - x
+        val oy = py - y
+        // Along the way it moves, and across it.
+        val dx = (ox * cos + oy * sin) / a
+        val dy = (oy * cos - ox * sin) / b
         return (sqrt(dx * dx + dy * dy) - 1f) * b
     }
 }
@@ -48,24 +70,35 @@ object LiquidOutline {
     fun loops(drops: List<LiquidDrop>, inset: Float = 0f, cell: Float = 1.5f): List<FloatArray> {
         val live = drops.filter { it.radius > 0.05f }
         if (live.isEmpty() || cell <= 0f) return emptyList()
+        // The squares cover each drop as far as its reach along the way it moves, and a
+        // quarter of that across it.
         var x0 = Float.MAX_VALUE
         var x1 = -Float.MAX_VALUE
-        var half = 0f
+        var y0 = Float.MAX_VALUE
+        var y1 = -Float.MAX_VALUE
         for (d in live) {
-            x0 = min(x0, d.x - d.radius * d.stretch - d.reach)
-            x1 = max(x1, d.x + d.radius * d.stretch + d.reach)
-            half = max(half, d.radius + d.reach / 4)
+            val along = d.radius * d.stretch + d.reach
+            val across = d.radius + d.reach / 4
+            val c = abs(cos(d.angle))
+            val s = abs(sin(d.angle))
+            val halfX = c * along + s * across
+            val halfY = s * along + c * across
+            x0 = min(x0, d.x - halfX)
+            x1 = max(x1, d.x + halfX)
+            y0 = min(y0, d.y - halfY)
+            y1 = max(y1, d.y + halfY)
         }
         x0 -= 2 * cell
         x1 += 2 * cell
-        half += 2 * cell
-        val y0 = -half
+        y0 -= 2 * cell
+        y1 += 2 * cell
         val nx = ceil((x1 - x0) / cell).toInt() + 1
-        val ny = ceil(2 * half / cell).toInt() + 1
+        val ny = ceil((y1 - y0) / cell).toInt() + 1
+        val shapes = live.map(::Shape)
         val v = FloatArray(nx * ny)
         for (j in 0 until ny) {
             val y = y0 + j * cell
-            for (i in 0 until nx) v[j * nx + i] = field(live, x0 + i * cell, y) + inset
+            for (i in 0 until nx) v[j * nx + i] = fieldOf(shapes, x0 + i * cell, y) + inset
         }
 
         // Marching squares, inside where v < 0. A crossing is named by its grid edge: twice the
@@ -136,10 +169,12 @@ object LiquidOutline {
         return loops
     }
 
-    /** The row's distance field: each drop run into those before it. */
-    fun field(drops: List<LiquidDrop>, x: Float, y: Float): Float {
-        var u = drops[0].distance(x, y)
-        for (n in 1 until drops.size) u = smoothMin(u, drops[n].distance(x, y), drops[n].reach)
+    /** The liquid's distance field: each drop run into those before it. */
+    fun field(drops: List<LiquidDrop>, x: Float, y: Float): Float = fieldOf(drops.map(::Shape), x, y)
+
+    private fun fieldOf(shapes: List<Shape>, x: Float, y: Float): Float {
+        var u = shapes[0].distance(x, y)
+        for (n in 1 until shapes.size) u = smoothMin(u, shapes[n].distance(x, y), shapes[n].reach)
         return u
     }
 
@@ -232,8 +267,104 @@ object LiquidMotion {
      */
     fun grow(s: Float): Float = if (s > 1f) 1f + 0.4f * (s - 1f) else max(0f, s * (2f - s))
 
-    private fun smoothstep(e0: Float, e1: Float, x: Float): Float {
+    internal fun smoothstep(e0: Float, e1: Float, x: Float): Float {
         val t = ((x - e0) / (e1 - e0)).coerceIn(0f, 1f)
         return t * t * (3 - 2 * t)
+    }
+}
+
+/** A setting's drop in the fan at a moment of its motion. */
+data class FanDrop(
+    val x: Float,
+    val y: Float,
+    val radius: Float,
+    val stretch: Float,
+    /** The way it moves, in radians clockwise from along the row. */
+    val angle: Float,
+    val reach: Float,
+    /** How much of the lit colour it wears: how far its setting is on, once it arrives. */
+    val accent: Float,
+    /** How clearly its icon shows. */
+    val label: Float,
+) {
+    val liquid get() = LiquidDrop(x, radius, stretch, reach, y, angle)
+}
+
+/** The fan at one moment: the round button's own drop, and the settings' drops in order. */
+class FanShape(val home: LiquidDrop, val drops: List<FanDrop>)
+
+/**
+ * The settings fan, opening as a hand fan does. Folded, it lies flat to the button's left: the
+ * drops come out of the round button ([button] across) together, as one drop, to [distance]
+ * from its centre, and swing round it from there, down toward below it, each 45 degrees
+ * round from the one before, the fan centred on the quarter circle (two at 22.5
+ * and 67.5 degrees, three at 0, 45 and 90), the later ones further, pulling free of the ones
+ * before them as they go. A drop's out is 0 at home inside the button and 1 at its distance;
+ * its sweep is 0 folded flat and 1 in its place. The rates say how fast they change (per
+ * second), and [lit] how far each drop's setting is on. Kept in step with the browser
+ * version's fanDrops, whose two drops sit where this puts two.
+ */
+object LiquidFan {
+    fun drops(
+        outs: FloatArray,
+        outRates: FloatArray,
+        sweeps: FloatArray,
+        sweepRates: FloatArray,
+        lit: FloatArray,
+        opening: Boolean,
+        size: Float,
+        button: Float,
+        distance: Float,
+    ): FanShape {
+        val count = outs.size
+        val r = size / 2
+        fun reachAt(s: Float) = 0.48f * size * (1 - s.coerceIn(0f, 1f)).pow(1.4f)
+        val out = if (count > 0) outs.map { it.coerceIn(0f, 1f) }.average().toFloat() else 0f
+        // The button gives a little as the drops leave it, and swells as they return.
+        val swell = (if (opening) -0.04f else 0.06f) * sin(PI.toFloat() * out)
+        val home = LiquidDrop(0f, (button / 2) * (1 + swell))
+        val drops = (0 until count).map { i ->
+            val s = outs[i]
+            // How far round from the button's left its place is, toward below: 45 degrees on
+            // from the one before, the fan centred on the quarter circle.
+            val swing = (PI.toFloat() / 4) * (1 + i - (count - 1) / 2f)
+            val angle = PI.toFloat() - swing * sweeps[i]
+            val along = distance * s
+            // Its velocity: out from the button, and round it.
+            val c = cos(angle)
+            val sn = sin(angle)
+            val outward = distance * outRates[i]
+            val round = along * swing * sweepRates[i]
+            val vx = outward * c + round * sn
+            val vy = outward * sn - round * c
+            // Drawn out along the way it goes, as much as a row's drop at the same speed.
+            val stretch = 1f + 0.14f * min(1f, hypot(vx, vy) / (size + 8) / 13f)
+            // Coming out it runs into the button; swinging round, into the drops it leaves.
+            val sweepReach = if (i == 0) 0f else reachAt(sweeps[i])
+            val arrived = min(s.coerceIn(0f, 1f), sweeps[i].coerceIn(0f, 1f))
+            FanDrop(
+                x = c * along,
+                y = sn * along,
+                radius = r * LiquidMotion.grow(s),
+                stretch = stretch,
+                angle = atan2(vy, vx),
+                reach = max(reachAt(s), sweepReach),
+                accent = lit[i] * LiquidMotion.smoothstep(0.45f, 0.95f, arrived),
+                label = LiquidMotion.smoothstep(0.72f, 0.97f, arrived),
+            )
+        }
+        // An icon shows once its drop is in its place and clear of the button and the others.
+        val all = listOf(home) + drops.map { it.liquid }
+        return FanShape(
+            home,
+            drops.mapIndexed { i, d ->
+                var gap = Float.MAX_VALUE
+                for ((j, o) in all.withIndex()) {
+                    if (j == i + 1 || o.radius <= 0.05f) continue
+                    gap = min(gap, hypot(d.x - o.x, d.y - o.y) - d.radius * d.stretch - o.radius * o.stretch)
+                }
+                d.copy(label = d.label * LiquidMotion.smoothstep(0f, 0.09f * size, gap))
+            },
+        )
     }
 }

@@ -50,12 +50,14 @@ resolution; the JavaScript one differs by at most the smallest 16-bit step on ab
 
 ## A recorded voice
 
-"Voice guidance", a switch on the home screen, says each change aloud in Lucas's own
-voice: "Breathe in", "Hold" and "Breathe out". It plays over Ambient or Bells, or alone
-with Silent. The voice and the tone (pad, air and bells) each have a volume, set in a
-session: the speaker opens a slider for each. The home screen only says what to hear. Until
-the voice's volume is first moved it starts where the tone's is, the balance it was mixed
-at.
+"Voice guidance" says each change aloud in Lucas's own voice: "Breathe in", "Hold" and
+"Breathe out". It is on from the first start. It and the sound (Ambient, Bells or Silent) are
+in the settings fan, a round button at the top right of the home screen that opens into a
+drop for each (on Android a third, for vibrating at each change). The voice plays over
+Ambient or Bells, or alone with Silent. The voice and the tone (pad, air and bells) each have
+a volume, set in a session: the speaker opens a slider for each. The fan only says what to
+hear. Until the voice's volume is first moved it starts where the tone's is, the balance it
+was mixed at.
 
 The prompts are mixed into the sound by `BreathSynth` itself, so they keep the same clock
 as everything else, including the allowance for Bluetooth delay. Each starts a little

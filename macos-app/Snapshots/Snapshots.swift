@@ -81,6 +81,16 @@ struct Snapshots {
         shoot("1-home-night", night, HomeView(model: model))
         shoot("1-home-session-length-open", noon, HomeView(model: model, choosing: true))
         shoot("1-home-session-length-open-night", night, HomeView(model: model, choosing: true))
+        // Sound and voice fanned out of the corner: both on, then both off.
+        shoot("1-home-settings-open", noon, HomeView(model: model, settingsOpen: true))
+        shoot("1-home-settings-open-night", night, HomeView(model: model, settingsOpen: true))
+        let (sound, voice) = (model.soundMode, model.voiceOn)
+        model.soundMode = .silent
+        model.voiceOn = false
+        shoot("1-home-settings-off", noon, HomeView(model: model, settingsOpen: true))
+        shoot("1-home-settings-off-night", night, HomeView(model: model, settingsOpen: true))
+        model.soundMode = sound
+        model.voiceOn = voice
         for (name, t) in [("2-settle", 3.0), ("3-inhale", 9.9), ("4-hold", 13.6), ("5-exhale", 17.6)] {
             shoot("\(name)-night", night, SessionView(model: model, session: session(at: t)))
         }

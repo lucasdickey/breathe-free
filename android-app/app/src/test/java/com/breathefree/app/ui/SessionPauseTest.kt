@@ -41,7 +41,9 @@ class SessionPauseTest {
         compose.mainClock.autoAdvance = false
         val controller = BreatheController(context) { nanos() }
         controller.chooseCycles(2)
-        controller.chooseSound(SoundMode.SILENT) // no audio thread under the test clock
+        // No audio thread under the test clock: silent, and no voice (which speaks even then).
+        controller.chooseSound(SoundMode.SILENT)
+        controller.chooseVoice(false)
         compose.setContent { BreatheApp(controller) { noon } }
         compose.mainClock.advanceTimeBy(1_000)
         compose.runOnUiThread { controller.begin() }

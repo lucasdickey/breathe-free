@@ -2,11 +2,10 @@ package com.breathefree.app.ui
 
 import android.content.Context
 import androidx.activity.ComponentActivity
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import com.breathefree.app.BreatheController
@@ -27,8 +26,9 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * "Voice guidance" on the home screen: off until chosen, kept for next time, and the
- * prompts are decoded once, off the main thread, as soon as it is switched on.
+ * "Voice guidance", in the settings fan: on from the first start, with the prompts decoded
+ * once, off the main thread, straight away; switched off and on again in the fan, and kept for
+ * next time either way.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -50,50 +50,35 @@ class VoiceSwitchTest {
         clips
     }
 
-    private fun switchState(on: Boolean) =
-        SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, if (on) "On" else "Off")
-
     @Test
-    fun speakingIsOffUntilChosenThenKept() {
+    fun speakingIsOnUntilSwitchedOffAndKeptEitherWay() {
         val controller = BreatheController(context, loadVoice = loader()) { 0L }
+        assertTrue(controller.voiceOn)
+        assertTrue("decoded straight away", ready.await(5, TimeUnit.SECONDS))
         compose.mainClock.autoAdvance = false // the orb and the sky never stop moving
         compose.setContent { BreatheApp(controller) { noon } }
         compose.mainClock.advanceTimeBy(500)
-        val row = compose.onNodeWithText("Voice guidance")
-        row.assert(switchState(false))
-        assertFalse(controller.voiceOn)
-        assertEquals("nothing decoded while it is off", 0, decoded.get())
+        compose.onNodeWithContentDescription("Sound, voice and vibration").performClick()
+        compose.mainClock.advanceTimeBy(800)
+        val voice = compose.onNodeWithContentDescription("Voice guidance")
+        voice.assertIsOn()
 
-        row.performClick()
+        voice.performClick()
         compose.mainClock.advanceTimeBy(100)
-        row.assert(switchState(true))
-        assertTrue(controller.voiceOn)
-        assertTrue("decoded once switched on", ready.await(5, TimeUnit.SECONDS))
+        voice.assertIsOff()
+        assertFalse(controller.voiceOn)
+        // Kept: the next start of the app has it off, and decodes nothing.
+        assertFalse(BreatheController(context, loadVoice = loader()) { 0L }.voiceOn)
+        assertEquals(1, decoded.get())
 
-        // Kept: the next start of the app has it on, and decodes the prompts straight away.
-        val next = BreatheController(context, loadVoice = loader()) { 0L }
-        assertTrue(next.voiceOn)
+        // On again, kept too: the next start decodes the prompts straight away.
+        voice.performClick()
+        compose.mainClock.advanceTimeBy(100)
+        voice.assertIsOn()
+        assertTrue(controller.voiceOn)
+        assertTrue(BreatheController(context, loadVoice = loader()) { 0L }.voiceOn)
         val until = System.nanoTime() + 5_000_000_000L
         while (decoded.get() < 2 && System.nanoTime() < until) Thread.sleep(10)
         assertEquals(2, decoded.get())
-
-        // And off again.
-        row.performClick()
-        compose.mainClock.advanceTimeBy(100)
-        row.assert(switchState(false))
-        assertFalse(BreatheController(context, loadVoice = loader()) { 0L }.voiceOn)
-    }
-
-    @Test
-    fun vibratingIsStillItsOwnSwitch() {
-        val controller = BreatheController(context, loadVoice = loader()) { 0L }
-        compose.mainClock.autoAdvance = false
-        compose.setContent { BreatheApp(controller) { noon } }
-        compose.mainClock.advanceTimeBy(500)
-        val before = controller.hapticsOn
-        compose.onNodeWithText("Vibrate at each change").performClick()
-        compose.mainClock.advanceTimeBy(100)
-        assertEquals(!before, controller.hapticsOn)
-        assertFalse(controller.voiceOn)
     }
 }

@@ -6,26 +6,49 @@
 //  and pull free as drops; when one is picked, they all flow back into it. Drops run into one
 //  another wherever they come close, as far as each drop's reach, and the reach eases to nothing
 //  as a drop settles, so at rest they are plain circles. Every value is a function of time, so
-//  the picker can draw any moment of the motion. Kept in step with the Android app's
-//  LiquidPicker.kt.
+//  the picker can draw any moment of the motion. The settings fan (SettingsFan.swift) is the
+//  same liquid, its drops going out on a slant (LiquidFan, FanMotion). Kept in step with the
+//  Android app's LiquidPicker.kt and the browser version's liquid.ts.
 //
 
 import Foundation
 
-/// One drop of a row of liquid, centred on the row's line.
+/// One drop of liquid. A row's drops sit on its line, which is the default.
 struct LiquidDrop: Equatable {
     /// Its centre along the row.
     var x: Double
     var radius: Double
-    /// How far it is drawn out along the row as it moves; 1 is round.
+    /// How far it is drawn out along the way it moves; 1 is round.
     var stretch = 1.0
-    /// How far it runs into the drops before it in the row.
+    /// How far it runs into the drops before it.
     var reach = 0.0
+    /// Its centre below the row's line (0 on it).
+    var y = 0.0
+    /// The way it moves, in radians clockwise from along the row (0, the default).
+    var angle = 0.0
 
     /// Distance from its edge, negative inside: exact when round, close when stretched.
+    func distance(_ px: Double, _ py: Double) -> Double { MeasuredDrop(self).distance(px, py) }
+}
+
+/// A drop ready to measure from: its centre, its half-lengths and the way it is drawn out.
+private struct MeasuredDrop {
+    let x, y, a, b, c, s, reach: Double
+
+    init(_ d: LiquidDrop) {
+        x = d.x
+        y = d.y
+        a = d.radius * d.stretch
+        b = d.radius / d.stretch
+        c = cos(d.angle)
+        s = sin(d.angle)
+        reach = d.reach
+    }
+
     func distance(_ px: Double, _ py: Double) -> Double {
-        let a = radius * stretch, b = radius / stretch
-        let dx = (px - x) / a, dy = py / b
+        let ox = px - x, oy = py - y
+        // Along the way it moves, and across it.
+        let dx = (ox * c + oy * s) / a, dy = (oy * c - ox * s) / b
         return ((dx * dx + dy * dy).squareRoot() - 1) * b
     }
 }
@@ -39,23 +62,30 @@ enum LiquidOutline {
     static func loops(_ drops: [LiquidDrop], inset: Double = 0, cell: Double = 1.5) -> [[SIMD2<Double>]] {
         let live = drops.filter { $0.radius > 0.05 }
         guard !live.isEmpty, cell > 0 else { return [] }
-        var x0 = Double.infinity, x1 = -Double.infinity, half = 0.0
+        // The squares cover each drop as far as its reach along the way it moves, and a quarter
+        // of that across it.
+        var x0 = Double.infinity, x1 = -Double.infinity, y0 = Double.infinity, y1 = -Double.infinity
         for d in live {
-            x0 = min(x0, d.x - d.radius * d.stretch - d.reach)
-            x1 = max(x1, d.x + d.radius * d.stretch + d.reach)
-            half = max(half, d.radius + d.reach / 4)
+            let along = d.radius * d.stretch + d.reach, across = d.radius + d.reach / 4
+            let c = abs(cos(d.angle)), s = abs(sin(d.angle))
+            let halfX = c * along + s * across, halfY = s * along + c * across
+            x0 = min(x0, d.x - halfX)
+            x1 = max(x1, d.x + halfX)
+            y0 = min(y0, d.y - halfY)
+            y1 = max(y1, d.y + halfY)
         }
         x0 -= 2 * cell
         x1 += 2 * cell
-        half += 2 * cell
-        let y0 = -half
+        y0 -= 2 * cell
+        y1 += 2 * cell
         let nx = Int(((x1 - x0) / cell).rounded(.up)) + 1
-        let ny = Int((2 * half / cell).rounded(.up)) + 1
+        let ny = Int(((y1 - y0) / cell).rounded(.up)) + 1
+        let measured = live.map(MeasuredDrop.init)
         var v = [Double](repeating: 0, count: nx * ny)
         for j in 0..<ny {
             let y = y0 + Double(j) * cell
             for i in 0..<nx {
-                v[j * nx + i] = field(live, x0 + Double(i) * cell, y) + inset
+                v[j * nx + i] = field(measured, x0 + Double(i) * cell, y) + inset
             }
         }
 
@@ -123,8 +153,12 @@ enum LiquidOutline {
         return loops
     }
 
-    /// The row's distance field: each drop run into those before it.
+    /// The liquid's distance field: each drop run into those before it.
     static func field(_ drops: [LiquidDrop], _ x: Double, _ y: Double) -> Double {
+        field(drops.map(MeasuredDrop.init), x, y)
+    }
+
+    private static func field(_ drops: [MeasuredDrop], _ x: Double, _ y: Double) -> Double {
         var u = drops[0].distance(x, y)
         for d in drops.dropFirst() {
             u = smoothMin(u, d.distance(x, y), d.reach)
@@ -268,6 +302,207 @@ struct PickerMotion: Equatable {
         }
         let e = exp(-w * t)
         return (1 - e * (1 + w * t), w * w * t * e)
+    }
+}
+
+/// A setting's drop in the fan at a moment of its motion.
+struct FanDrop: Equatable {
+    var x: Double
+    var y: Double
+    var radius: Double
+    var stretch: Double
+    /// The way it moves, in radians clockwise from along the row.
+    var angle: Double
+    var reach: Double
+    /// How much of the lit colour it wears: how far its setting is on, once it arrives.
+    var accent: Double
+    /// How clearly its icon shows.
+    var label: Double
+
+    var liquid: LiquidDrop { LiquidDrop(x: x, radius: radius, stretch: stretch, reach: reach, y: y, angle: angle) }
+}
+
+/// The fan at one moment: the round button's own drop, and the settings' drops in order.
+struct FanShape: Equatable {
+    var home: LiquidDrop
+    var drops: [FanDrop]
+}
+
+/// The settings fan, opening as a hand fan does. Folded, it lies flat to the button's left: the
+/// drops come out of the round button (`button` across) together, as one drop, to `distance`
+/// from its centre, and swing round it from there, down toward below it, each 45 degrees round
+/// from the one before, the fan centred on the quarter circle (two at 22.5 and 67.5 degrees,
+/// three at 0, 45 and 90), the later ones further, pulling free of the ones before them as they
+/// go. A drop's out is 0 at home inside the button and 1 at its distance; its sweep is 0 folded
+/// flat and 1 in its place. The rates say how fast they change (per second), and `lit` how far
+/// each drop's setting is on. Kept in step with the browser version's fanDrops and the Android
+/// app's LiquidFan.
+enum LiquidFan {
+    static func drops(outs: [Double], outRates: [Double], sweeps: [Double], sweepRates: [Double], lit: [Double],
+                      opening: Bool, size: Double, button: Double, distance: Double) -> FanShape {
+        let count = outs.count
+        let r = size / 2
+        func reachAt(_ s: Double) -> Double { 0.48 * size * pow(1 - clamp(s), 1.4) }
+        let out = count > 0 ? outs.map(clamp).reduce(0, +) / Double(count) : 0
+        // The button gives a little as the drops leave it, and swells as they return.
+        let swell = (opening ? -0.04 : 0.06) * sin(.pi * out)
+        let home = LiquidDrop(x: 0, radius: button / 2 * (1 + swell))
+        var drops = (0..<count).map { i -> FanDrop in
+            let s = outs[i]
+            // How far round from the button's left its place is, toward below: 45 degrees on
+            // from the one before, the fan centred on the quarter circle.
+            let swing = Double.pi / 4 * (1 + Double(i) - Double(count - 1) / 2)
+            let angle = Double.pi - swing * sweeps[i]
+            let along = distance * s
+            // Its velocity: out from the button, and round it.
+            let c = cos(angle), sn = sin(angle)
+            let outward = distance * outRates[i]
+            let turning = along * swing * sweepRates[i]
+            let vx = outward * c + turning * sn, vy = outward * sn - turning * c
+            // Drawn out along the way it goes, as much as a row's drop at the same speed.
+            let stretch = 1 + 0.14 * min(1, (vx * vx + vy * vy).squareRoot() / (size + 8) / 13)
+            // Coming out it runs into the button; swinging round, into the drops it leaves.
+            let sweepReach = i == 0 ? 0 : reachAt(sweeps[i])
+            let arrived = min(clamp(s), clamp(sweeps[i]))
+            return FanDrop(x: c * along, y: sn * along, radius: r * PickerMotion.grow(s), stretch: stretch,
+                           angle: atan2(vy, vx), reach: max(reachAt(s), sweepReach),
+                           accent: lit[i] * smoothstep(0.45, 0.95, arrived), label: smoothstep(0.72, 0.97, arrived))
+        }
+        // An icon shows once its drop is in its place and clear of the button and the others.
+        let all = [home] + drops.map(\.liquid)
+        for i in drops.indices {
+            let d = drops[i]
+            var gap = Double.infinity
+            for (j, o) in all.enumerated() where j != i + 1 && o.radius > 0.05 {
+                gap = min(gap, hypot(d.x - o.x, d.y - o.y) - d.radius * d.stretch - o.radius * o.stretch)
+            }
+            drops[i].label *= smoothstep(0, 0.09 * size, gap)
+        }
+        return FanShape(home: home, drops: drops)
+    }
+}
+
+/// How the settings fan moves, as a function of time like the picker's. Opening, the drops come
+/// out of the button together and a moment later swing round to their places; folding, they
+/// swing back into one and then go home, at once if they had not yet swung open. For those who
+/// ask for less motion they stand in their places and fade in and out instead. A drop's colour
+/// eases on and off as its setting changes.
+struct FanMotion: Equatable {
+    /// The browser version's springs, as SwiftUI-style responses: out from the button and round
+    /// it, each with a little bounce, as a fan's blades.
+    static let outResponse = 2 * Double.pi / 260.0.squareRoot()
+    static let outDamping = 0.62
+    static let sweepResponse = 2 * Double.pi / 200.0.squareRoot()
+    static let sweepDamping = 0.55
+    /// Opening, the drops start to swing round this long after they start to come out...
+    static let sweepAfter = 0.05
+    /// ...and folding, they go home this long after they start to swing back.
+    static let homeAfter = 0.11
+    /// How long the drops take to fade in or out, for less motion.
+    static let fade = 0.16
+    /// From a change until every spring has come to rest.
+    static let duration = 1.2
+
+    /// When the fan last opened or folded, on the media clock.
+    var changedAt = -Double.infinity
+    var opening: Bool
+    /// Whether it moves with less motion, fading in and out in place.
+    var reduced = false
+    /// Each drop's out and sweep at that moment, and how much of the drops showed.
+    var fromOut: [Double]
+    var fromSweep: [Double]
+    var fromShown = 1.0
+    /// Folded before they had swung open, the drops go home at once.
+    var together = false
+    /// Each drop's setting, on or off; how lit each was when one last changed, and when.
+    var on: [Bool]
+    var fromLit: [Double]
+    var litChangedAt = -Double.infinity
+
+    /// At rest, open or folded, its drops lit as `on` says.
+    init(open: Bool, lit on: [Bool]) {
+        opening = open
+        fromOut = on.map { _ in open ? 1 : 0 }
+        fromSweep = fromOut
+        self.on = on
+        fromLit = on.map { $0 ? 1 : 0 }
+    }
+
+    /// A move that starts at `time` from wherever the drops are then.
+    func changed(open: Bool, reduced: Bool, at time: Double) -> FanMotion {
+        var next = self
+        next.fromOut = fromOut.indices.map { out($0, at: time).value }
+        next.fromSweep = fromSweep.indices.map { sweep($0, at: time).value }
+        next.together = next.fromSweep.allSatisfy { $0 < 0.05 }
+        // A fade starts from as much as shows now: nothing while the drops are home.
+        let home = next.fromOut.allSatisfy({ $0 < 0.05 })
+        next.fromShown = self.reduced ? shown(at: time) : home ? 0 : 1
+        next.reduced = reduced
+        next.changedAt = time
+        next.opening = open
+        return next
+    }
+
+    /// The same move, with the drops' settings turned on or off at `time`.
+    func relit(_ on: [Bool], at time: Double) -> FanMotion {
+        var next = self
+        next.fromLit = fromLit.indices.map { lit($0, at: time) }
+        next.on = on
+        next.litChangedAt = time
+        return next
+    }
+
+    func isSettled(at time: Double) -> Bool { time - changedAt > Self.duration }
+
+    /// Drop `i`'s out at `time`, and how fast it is changing.
+    func out(_ i: Int, at time: Double) -> (value: Double, velocity: Double) {
+        let t = time - changedAt
+        // With less motion they stand in their places while they show, and are home once gone.
+        if reduced { return (opening || t < Self.fade ? 1 : 0, 0) }
+        let from = fromOut[i]
+        if opening {
+            let (p, rate) = PickerMotion.spring(t, response: Self.outResponse, damping: Self.outDamping)
+            return (from + (1 - from) * p, (1 - from) * rate)
+        }
+        let (p, rate) = PickerMotion.spring(t - (together ? 0 : Self.homeAfter),
+                                            response: PickerMotion.closeResponse, damping: 1)
+        return (from * (1 - p), -from * rate)
+    }
+
+    /// Drop `i`'s sweep at `time`, and how fast it is changing.
+    func sweep(_ i: Int, at time: Double) -> (value: Double, velocity: Double) {
+        let t = time - changedAt
+        if reduced { return (opening || t < Self.fade ? 1 : 0, 0) }
+        let from = fromSweep[i]
+        if opening {
+            let (p, rate) = PickerMotion.spring(t - Self.sweepAfter, response: Self.sweepResponse,
+                                                damping: Self.sweepDamping)
+            return (from + (1 - from) * p, (1 - from) * rate)
+        }
+        let (p, rate) = PickerMotion.spring(t, response: PickerMotion.closeResponse, damping: 1)
+        return (from * (1 - p), -from * rate)
+    }
+
+    /// How much of the drops shows at `time`: all of them, but while fading for less motion.
+    func shown(at time: Double) -> Double {
+        guard reduced else { return 1 }
+        return fromShown + ((opening ? 1 : 0) - fromShown) * clamp((time - changedAt) / Self.fade)
+    }
+
+    /// How lit drop `i` is at `time`, its colour easing on or off since its setting changed.
+    func lit(_ i: Int, at time: Double) -> Double {
+        fromLit[i] + ((on[i] ? 1 : 0) - fromLit[i]) * smoothstep(0, PickerMotion.recolour, time - litChangedAt)
+    }
+
+    /// The fan at `time`, for drops `size` across, `distance` from the centre of a round button
+    /// `button` across.
+    func shape(at time: Double, size: Double, button: Double, distance: Double) -> FanShape {
+        let outs = fromOut.indices.map { out($0, at: time) }
+        let sweeps = fromSweep.indices.map { sweep($0, at: time) }
+        return LiquidFan.drops(outs: outs.map { $0.value }, outRates: outs.map { $0.velocity },
+                               sweeps: sweeps.map { $0.value }, sweepRates: sweeps.map { $0.velocity },
+                               lit: on.indices.map { lit($0, at: time) }, opening: opening,
+                               size: size, button: button, distance: distance)
     }
 }
 

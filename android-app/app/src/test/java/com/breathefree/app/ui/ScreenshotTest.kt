@@ -64,7 +64,9 @@ class ScreenshotTest {
 
     /** Runs a session from [controller]'s home screen, shooting the moments named. */
     private fun session(controller: BreatheController, prefix: String, moments: List<Pair<Double, String>>) {
-        controller.chooseSound(SoundMode.SILENT) // no audio thread under the test clock
+        // No audio thread under the test clock: silent, and no voice (which speaks even then).
+        controller.chooseSound(SoundMode.SILENT)
+        controller.chooseVoice(false)
         compose.runOnUiThread { controller.begin() }
         val start = compose.mainClock.currentTime
         // Session time t is reached when the frame clock passes start + lead + t (less the
@@ -191,6 +193,86 @@ class ScreenshotTest {
         shot("picker-7-reopened-after-back")
         assertEquals(Screen.HOME, controller.screen)
     }
+
+    private val fanButton get() = compose.onNodeWithContentDescription("Sound, voice and vibration")
+
+    /** The settings fan at [time]: folded, opening, open, its settings changed, folding and folded. */
+    private fun fanShots(prefix: String, time: ZonedDateTime) {
+        val controller = controller()
+        compose.setContent { BreatheApp(controller) { time } }
+        compose.mainClock.advanceTimeBy(1_000)
+        shot("$prefix-1-folded")
+
+        fanButton.performClick()
+        var at = 0L
+        for (ms in listOf(48L, 96L, 160L, 240L)) {
+            compose.mainClock.advanceTimeBy(ms - at)
+            at = ms
+            shot("$prefix-2-opening-${ms}ms")
+        }
+        compose.mainClock.advanceTimeBy(900)
+        shot("$prefix-3-open")
+
+        compose.onNodeWithContentDescription("Sound").performClick()
+        compose.mainClock.advanceTimeBy(300)
+        shot("$prefix-4-bells")
+        compose.onNodeWithContentDescription("Sound").performClick()
+        compose.onNodeWithContentDescription("Voice guidance").performClick()
+        compose.onNodeWithContentDescription("Vibrate at each change").performClick()
+        compose.mainClock.advanceTimeBy(300)
+        shot("$prefix-5-all-off")
+
+        fanButton.performClick()
+        at = 0L
+        for (ms in listOf(48L, 128L, 224L)) {
+            compose.mainClock.advanceTimeBy(ms - at)
+            at = ms
+            shot("$prefix-6-folding-${ms}ms")
+        }
+        compose.mainClock.advanceTimeBy(900)
+        shot("$prefix-7-folded")
+    }
+
+    @Test
+    fun settingsFanAtNoon() = fanShots("fan-noon", today(12, 30))
+
+    @Test
+    fun settingsFanAtNight() = fanShots("fan-night", today(21, 30))
+
+    /**
+     * Every frame of the fan opening, a setting changing and the fan folding, as JPEGs in
+     * build/screenshots/[prefix], for a film of the motion.
+     */
+    private fun fanFilm(prefix: String, time: ZonedDateTime) {
+        val controller = controller()
+        compose.setContent { BreatheApp(controller) { time } }
+        compose.mainClock.advanceTimeBy(1_000)
+        val out = File("build/screenshots/$prefix").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        var frame = 0
+        fun film(ms: Int) = repeat(ms / 16) {
+            compose.mainClock.advanceTimeBy(16)
+            compose.waitForIdle()
+            val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
+            File(out, "f%04d.jpg".format(frame++)).outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 95, it) }
+        }
+        film(320)
+        fanButton.performClick()
+        film(1_100)
+        compose.onNodeWithContentDescription("Voice guidance").performClick()
+        film(400)
+        fanButton.performClick()
+        film(900)
+        println("saved $frame frames to ${out.absolutePath}")
+    }
+
+    @Test
+    fun settingsFanFilmAtNoon() = fanFilm("fan-film-noon", today(12, 30))
+
+    @Test
+    fun settingsFanFilmAtNight() = fanFilm("fan-film-night", today(21, 30))
 
     @Test
     fun sessionLengthOpenAtNight() {

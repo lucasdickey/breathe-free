@@ -2,8 +2,8 @@
 //  Controls.swift
 //  BreatheFree
 //
-//  Buttons, the session-length picker and the sound picker, styled to sit on the sky in the
-//  colours the sky calls for (Ink).
+//  Buttons and the session-length picker, styled to sit on the sky in the colours the sky calls
+//  for (Ink).
 //
 
 import SwiftUI
@@ -203,35 +203,6 @@ struct CyclePicker: View {
                               width: 2 * d.radius * d.stretch, height: 2 * d.radius / d.stretch)
             context.fill(Path(ellipseIn: rect), with: .color(ink.accent.color(d.accent)))
         }
-    }
-}
-
-struct SegmentedChoice<Value: Hashable>: View {
-    let options: [(Value, String)]
-    @Binding var selection: Value
-    @Environment(\.ink) private var ink
-
-    var body: some View {
-        HStack(spacing: 3) {
-            ForEach(options.indices, id: \.self) { i in
-                let value = options[i].0
-                let on = value == selection
-                Button { selection = value } label: {
-                    Text(options[i].1)
-                        .font(.system(size: 14, weight: on ? .semibold : .regular))
-                        .foregroundColor((on ? ink.onAccent : ink.deep).color)
-                        .frame(maxWidth: .infinity, minHeight: 34)
-                        .background(Capsule().fill(on ? ink.accent.color : Color.clear))
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(on ? .isSelected : [])
-            }
-        }
-        .padding(3)
-        .frame(maxWidth: 360)
-        .background(Capsule().fill(ink.field.color))
-        .overlay(Capsule().stroke(ink.fieldBorder.color, lineWidth: 1))
     }
 }
 

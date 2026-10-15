@@ -38,7 +38,7 @@ final class SessionModel: ObservableObject {
         }
     }
 
-    /// Say each change aloud ("Breathe in", "Hold", "Breathe out"). Off until chosen.
+    /// Say each change aloud ("Breathe in", "Hold", "Breathe out"). On until switched off.
     @Published var voiceOn: Bool {
         didSet {
             defaults.set(voiceOn, forKey: Keys.voice)
@@ -68,7 +68,7 @@ final class SessionModel: ObservableObject {
         let savedVolume = defaults.object(forKey: Keys.volume) as? Double ?? 0.85
         volume = savedVolume
         voiceVolume = defaults.object(forKey: Keys.voiceVolume) as? Double ?? savedVolume
-        voiceOn = defaults.bool(forKey: Keys.voice)
+        voiceOn = defaults.object(forKey: Keys.voice) as? Bool ?? true
         if voiceOn { prepareVoice() }
     }
 

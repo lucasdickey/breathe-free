@@ -15,12 +15,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -39,7 +37,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
@@ -76,15 +73,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.progressBarRangeInfo
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -93,7 +87,6 @@ import com.breathefree.app.ActiveSession
 import com.breathefree.app.BreatheController
 import com.breathefree.app.Screen
 import com.breathefree.app.core.SessionPlan
-import com.breathefree.app.core.SoundMode
 import com.breathefree.app.core.Stage
 import java.time.ZonedDateTime
 import kotlin.math.PI
@@ -197,6 +190,7 @@ private fun HomeScreen(controller: BreatheController, frameNanos: State<Long>) {
     val choices = remember { SessionPlan.CYCLE_CHOICES.toList() }
     var choosing by rememberSaveable { mutableStateOf(false) }
     val choosingNow by rememberUpdatedState(choosing)
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
     val places = remember { Places() }
     BackHandler(enabled = choosing) { choosing = false }
 
@@ -240,9 +234,7 @@ private fun HomeScreen(controller: BreatheController, frameNanos: State<Long>) {
                 style = TextStyle(color = ink.deep, fontSize = 34.sp, fontWeight = FontWeight.Light, letterSpacing = 0.5.sp),
             )
 
-            Spacer(Modifier.height(36.dp))
-            Label("Session length")
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(56.dp))
             CyclePicker(
                 choices = choices,
                 selected = controller.cycles,
@@ -261,22 +253,24 @@ private fun HomeScreen(controller: BreatheController, frameNanos: State<Long>) {
                 style = TextStyle(color = ink.soft, fontSize = 14.sp),
             )
 
-            Spacer(Modifier.height(24.dp))
-            Label("Sound")
-            Spacer(Modifier.height(10.dp))
-            val modes = SoundMode.entries
-            Segmented(
-                options = listOf("Ambient", "Bells", "Silent"),
-                selected = modes.indexOf(controller.soundMode),
-                onSelect = { controller.chooseSound(modes[it]) },
-            )
-            Spacer(Modifier.height(14.dp))
-            SwitchRow("Voice guidance", controller.voiceOn, controller::chooseVoice)
-            SwitchRow("Vibrate at each change", controller.hapticsOn, controller::chooseHaptics)
-
-            Spacer(Modifier.height(32.dp))
-            PrimaryButton("Begin", onClick = controller::begin)
+            Spacer(Modifier.height(40.dp))
+            // Begin is the one thing to press, but it needn't span the phone: a comfortable
+            // width, centred.
+            PrimaryButton("Begin", onClick = controller::begin, modifier = Modifier.widthIn(max = 240.dp))
         }
+
+        // Sound, voice and vibration, folded into the button in the top-right corner.
+        SettingsFan(
+            open = settingsOpen,
+            onOpen = { settingsOpen = it },
+            sound = controller.soundMode,
+            onSound = controller::chooseSound,
+            voice = controller.voiceOn,
+            onVoice = controller::chooseVoice,
+            vibrate = controller.hapticsOn,
+            onVibrate = controller::chooseHaptics,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 
@@ -289,46 +283,6 @@ private class Places {
         val s = screen?.takeIf { it.isAttached } ?: return false
         val p = picker?.takeIf { it.isAttached } ?: return false
         return s.localBoundingBoxOf(p, clipBounds = false).contains(position)
-    }
-}
-
-@Composable
-private fun Label(text: String) {
-    BasicText(
-        text.uppercase(),
-        style = TextStyle(color = LocalInk.current.soft, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.4.sp),
-    )
-}
-
-/** A line of text with a switch at its end; a tap anywhere on the line flips it. */
-@Composable
-private fun SwitchRow(text: String, on: Boolean, onChange: (Boolean) -> Unit) {
-    val ink = LocalInk.current
-    val interaction = remember { MutableInteractionSource() }
-    Row(
-        Modifier
-            .widthIn(max = 380.dp)
-            .fillMaxWidth()
-            .clip(CircleShape)
-            .clickable(interactionSource = interaction, indication = null) { onChange(!on) }
-            .semantics {
-                role = Role.Switch
-                stateDescription = if (on) "On" else "Off"
-            }
-            .padding(horizontal = 6.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        BasicText(
-            text,
-            Modifier.weight(1f),
-            style = TextStyle(color = ink.deep, fontSize = 15.sp),
-        )
-        Canvas(Modifier.size(width = 46.dp, height = 28.dp)) {
-            drawRoundRect(if (on) ink.accent else ink.field, cornerRadius = CornerRadius(size.height / 2))
-            val r = size.height / 2 - 3.dp.toPx()
-            val x = if (on) size.width - size.height / 2 else size.height / 2
-            drawCircle(if (on) ink.onAccent else ink.soft.copy(alpha = 0.6f), r, Offset(x, size.height / 2))
-        }
     }
 }
 
