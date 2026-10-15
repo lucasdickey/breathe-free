@@ -7,5 +7,6 @@
   "cycles": { "before": 10, "picked": 6 },
   "taps": { "open": 3.5, "pick": 4.9, "begin": 6.3 },
   "session": { "lagSeconds": 2.5 },
-  "endCard": 26.5
+  "endCard": 26.5,
+  "fanStill": 3.4
 }
