@@ -10,7 +10,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
@@ -351,46 +350,6 @@ private fun DrawScope.drawLiquid(drops: List<PickerDrop>, chosen: Int, ink: Ink,
                 topLeft = Offset(d.x - d.radius * d.stretch, -d.radius / d.stretch),
                 size = Size(2 * d.radius * d.stretch, 2 * d.radius / d.stretch),
             )
-        }
-    }
-}
-
-@Composable
-fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
-    val ink = LocalInk.current
-    Row(
-        modifier
-            .widthIn(max = 380.dp)
-            .fillMaxWidth()
-            .height(44.dp)
-            .clip(RoundedCornerShape(22.dp))
-            .background(ink.field)
-            .border(1.dp, ink.fieldBorder, RoundedCornerShape(22.dp))
-            .padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-    ) {
-        options.forEachIndexed { i, label ->
-            val on = i == selected
-            val interaction = remember { MutableInteractionSource() }
-            Box(
-                Modifier
-                    .weight(1f)
-                    .height(38.dp)
-                    .clip(RoundedCornerShape(19.dp))
-                    .background(if (on) ink.accent else Color.Transparent)
-                    .pressable(interaction, Role.RadioButton) { onSelect(i) }
-                    .semantics { this.selected = on },
-                contentAlignment = Alignment.Center,
-            ) {
-                BasicText(
-                    label,
-                    style = TextStyle(
-                        color = if (on) ink.onAccent else ink.deep,
-                        fontSize = 15.sp,
-                        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
-                    ),
-                )
-            }
         }
     }
 }

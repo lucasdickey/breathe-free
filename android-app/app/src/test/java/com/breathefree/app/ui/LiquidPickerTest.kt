@@ -3,7 +3,11 @@ package com.breathefree.app.ui
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 class LiquidPickerTest {
@@ -104,5 +108,71 @@ class LiquidPickerTest {
         assertEquals(1f, LiquidMotion.grow(1f), 1e-6f)
         assertTrue(LiquidMotion.grow(0.5f) in 0.5f..1f)
         assertTrue(LiquidMotion.grow(1.1f) > 1f)
+    }
+
+    // ---------------------------------------------------------------- the settings fan
+
+    private val fanSize = 48f
+    private val fanButton = 44f
+    private val fanDistance = 92f
+
+    private fun fan(out: Float, sweep: Float, count: Int = 3, sweepRate: Float = 0f) = LiquidFan.drops(
+        FloatArray(count) { out }, FloatArray(count), FloatArray(count) { sweep }, FloatArray(count) { sweepRate },
+        FloatArray(count) { 1f }, true, fanSize, fanButton, fanDistance,
+    )
+
+    private fun turn(degrees: Double) = PI * degrees / 180
+
+    @Test
+    fun openTheDropsRestAQuarterOfARightAngleApart() {
+        val open = fan(1f, 1f)
+        // Three: left of the button, the diagonal, and below it.
+        for ((i, degrees) in listOf(0.0, 45.0, 90.0).withIndex()) {
+            val d = open.drops[i]
+            assertEquals(-cos(turn(degrees)).toFloat() * fanDistance, d.x, 1e-3f)
+            assertEquals(sin(turn(degrees)).toFloat() * fanDistance, d.y, 1e-3f)
+            assertEquals(24f, d.radius, 1e-4f)
+            assertEquals(1f, d.label, 1e-4f)
+            assertEquals(1f, d.accent, 1e-4f)
+        }
+        assertEquals(4, LiquidOutline.loops(listOf(open.home) + open.drops.map { it.liquid }).size)
+        // Two: where the browser version puts them.
+        val two = fan(1f, 1f, count = 2).drops
+        assertEquals(-cos(turn(22.5)).toFloat() * fanDistance, two[0].x, 1e-3f)
+        assertEquals(sin(turn(67.5)).toFloat() * fanDistance, two[1].y, 1e-3f)
+    }
+
+    @Test
+    fun foldedTheDropsWaitInsideTheButton() {
+        val folded = fan(0f, 0f)
+        assertEquals(22f, folded.home.radius, 1e-4f)
+        for (d in folded.drops) {
+            assertEquals(0f, d.radius, 1e-4f)
+            assertEquals(0f, d.label, 1e-4f)
+        }
+        assertEquals(1, LiquidOutline.loops(listOf(folded.home) + folded.drops.map { it.liquid }).size)
+    }
+
+    @Test
+    fun outButNotYetSwungTheyLieFlatToTheLeftAsOne() {
+        val drops = fan(1f, 0f, sweepRate = 3f).drops
+        for (d in drops) {
+            assertEquals(-fanDistance, d.x, 1e-3f)
+            assertEquals(0f, d.y, 1e-3f)
+            assertEquals(0f, d.label, 1e-4f)
+        }
+        // The later drops pull free of the first as liquid.
+        assertTrue(drops[1].reach > 1f && drops[2].reach > 1f)
+        assertEquals(0f, drops[0].reach, 1e-4f)
+    }
+
+    @Test
+    fun aSwingingDropIsDrawnOutAlongItsCurve() {
+        val d = fan(1f, 0.5f, sweepRate = 3f).drops[2]
+        // Swinging round the button, it moves at right angles to the line from the button.
+        val fromButton = atan2(d.y, d.x)
+        val across = abs(abs(d.angle - fromButton) - PI.toFloat() / 2)
+        assertTrue("moving round, not out: ${d.angle} against $fromButton", across < 0.05f)
+        assertTrue(d.stretch > 1f)
     }
 }

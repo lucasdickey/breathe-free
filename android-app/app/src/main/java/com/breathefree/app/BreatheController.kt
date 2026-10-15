@@ -82,8 +82,8 @@ class BreatheController(
     var voiceVolume by mutableFloatStateOf(prefs.getFloat(KEY_VOICE_VOLUME, volume).coerceIn(0f, 1f))
         private set
 
-    /** Say each change aloud ("Breathe in", "Hold", "Breathe out"). Off until chosen. */
-    var voiceOn by mutableStateOf(prefs.getBoolean(KEY_VOICE, false))
+    /** Say each change aloud ("Breathe in", "Hold", "Breathe out"). On until switched off. */
+    var voiceOn by mutableStateOf(prefs.getBoolean(KEY_VOICE, true))
         private set
 
     private var voiceClips: Future<VoiceClips?>? = null

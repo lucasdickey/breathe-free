@@ -83,7 +83,7 @@ class PromoTest {
         val inSession = taps.getDouble("begin") <= 0.0
         controller.chooseCycles(cycles.getInt(if (inSession) "picked" else "before"))
         controller.chooseSound(SoundMode.AMBIENT)
-        // The home screen shows Voice guidance on.
+        // Voice guidance on, as the app starts.
         controller.chooseVoice(true)
 
         // The sky's time of day eases from morning to night across the opening seconds.
