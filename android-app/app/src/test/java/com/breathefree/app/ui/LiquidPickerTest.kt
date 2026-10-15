@@ -124,7 +124,7 @@ class LiquidPickerTest {
     private fun turn(degrees: Double) = PI * degrees / 180
 
     @Test
-    fun openTheDropsRestAQuarterOfARightAngleApart() {
+    fun openTheDropsRestFortyFiveDegreesApart() {
         val open = fan(1f, 1f)
         // Three: left of the button, the diagonal, and below it.
         for ((i, degrees) in listOf(0.0, 45.0, 90.0).withIndex()) {

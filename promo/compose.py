@@ -335,9 +335,10 @@ class Phone:
 # ------------------------------------------------------------------ Mac: a window and a pointer
 
 class MacHome:
-    """Where things are on the Mac home screen, measured from its frames, and the one thing the
-    still renderer can't show: the Voice guidance switch, an AppKit control it leaves a yellow
-    placeholder for. (Session length's motion it draws itself, from the moments in the script.)"""
+    """Where things are on the Mac home screen, measured from its frames, and on screens from
+    before the settings fan, the one thing the still renderer can't show: the Voice guidance
+    switch, an AppKit control it leaves a yellow placeholder for. (Session length's motion it
+    draws itself, from the moments in the script, and the settings fan is its own drawing.)"""
 
     def __init__(self, load):
         closed = np.asarray(load(frame_index_before(TAPS["open"]) - 3), dtype=np.int32)
@@ -366,16 +367,17 @@ class MacHome:
             "pick": (self.cx + self.slot(self.picked), self.cy),
             "begin": begin,
         }
-        # The switch's placeholder, the one patch of the renderer's yellow on the screen.
+        # The switch's placeholder, the one patch of the renderer's yellow on the screen, if
+        # there is one: the home screen has had no switch since the settings fan.
         yellow = (closed[:, :, 0] > 200) & (closed[:, :, 1] > 150) & (closed[:, :, 2] < 110)
         boxes = [(x0 - 2, y0 - 2, x1 + 2, y1 + 2)
                  for y0, y1 in runs(yellow.any(axis=1))
                  for x0, x1 in runs(yellow[y0:y1].any(axis=0))
                  if x1 - x0 >= 8 * self.pt and y1 - y0 >= 8 * self.pt]  # not a yellow fleck of the sky
-        if len(boxes) != 1:
-            sys.exit(f"expected the Voice guidance switch alone on the Mac home screen, "
+        if len(boxes) > 1:
+            sys.exit(f"expected at most the Voice guidance switch on the Mac home screen, "
                      f"found {len(boxes)} controls")
-        self.switch = boxes[0]
+        self.switch = boxes[0] if boxes else None
 
     def slot(self, i):
         return (i - (len(CHOICES) - 1) / 2) * self.step
@@ -383,7 +385,9 @@ class MacHome:
     def fix_switch(self, frame):
         """Paints the Voice guidance switch where its placeholder is, on, as the promo has the
         voice on (macos-app/Promo/Promo.swift): the system's blue with a white knob, against
-        the right edge of its row."""
+        the right edge of its row. Without one, there is nothing to paint."""
+        if self.switch is None:
+            return frame
         x0, y0, x1, y1 = self.switch
         a = np.asarray(frame, dtype=np.float32).copy()
         # The sky behind it, blended in from the sky all round so that it meets it at every

@@ -296,8 +296,8 @@ class FanShape(val home: LiquidDrop, val drops: List<FanDrop>)
 /**
  * The settings fan, opening as a hand fan does. Folded, it lies flat to the button's left: the
  * drops come out of the round button ([button] across) together, as one drop, to [distance]
- * from its centre, and swing round it from there, down toward below it, each a quarter of a
- * right angle round from the one before, the fan centred on the quarter circle (two at 22.5
+ * from its centre, and swing round it from there, down toward below it, each 45 degrees
+ * round from the one before, the fan centred on the quarter circle (two at 22.5
  * and 67.5 degrees, three at 0, 45 and 90), the later ones further, pulling free of the ones
  * before them as they go. A drop's out is 0 at home inside the button and 1 at its distance;
  * its sweep is 0 folded flat and 1 in its place. The rates say how fast they change (per

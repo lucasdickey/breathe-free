@@ -12,6 +12,7 @@
 		AA00002A0000000000000001 /* BreathTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00002B0000000000000001 /* BreathTimeline.swift */; };
 		AA0000400000000000000001 /* DaySky.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000410000000000000001 /* DaySky.swift */; };
 		AA0000420000000000000001 /* LiquidPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000430000000000000001 /* LiquidPicker.swift */; };
+		AA0000510000000000000001 /* IconPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000520000000000000001 /* IconPaths.swift */; };
 		AA0000440000000000000001 /* VoiceClips.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000450000000000000001 /* VoiceClips.swift */; };
 		AA0000460000000000000001 /* VoiceLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000470000000000000001 /* VoiceLoader.swift */; };
 		AA00002C0000000000000001 /* BreathSynth.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00002D0000000000000001 /* BreathSynth.swift */; };
@@ -21,6 +22,7 @@
 		AA0000320000000000000001 /* SceneDrawing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000330000000000000001 /* SceneDrawing.swift */; };
 		AA0000340000000000000001 /* SkyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000350000000000000001 /* SkyView.swift */; };
 		AA0000360000000000000001 /* Controls.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000370000000000000001 /* Controls.swift */; };
+		AA00004F0000000000000001 /* SettingsFan.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000500000000000000001 /* SettingsFan.swift */; };
 		AA0000380000000000000001 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000390000000000000001 /* HomeView.swift */; };
 		AA00003A0000000000000001 /* SessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00003B0000000000000001 /* SessionView.swift */; };
 		AA00003C0000000000000001 /* DoneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00003D0000000000000001 /* DoneView.swift */; };
@@ -37,6 +39,7 @@
 		AA00002B0000000000000001 /* BreathTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreathTimeline.swift; sourceTree = "<group>"; };
 		AA0000410000000000000001 /* DaySky.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaySky.swift; sourceTree = "<group>"; };
 		AA0000430000000000000001 /* LiquidPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidPicker.swift; sourceTree = "<group>"; };
+		AA0000520000000000000001 /* IconPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconPaths.swift; sourceTree = "<group>"; };
 		AA0000450000000000000001 /* VoiceClips.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceClips.swift; sourceTree = "<group>"; };
 		AA0000470000000000000001 /* VoiceLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceLoader.swift; sourceTree = "<group>"; };
 		AA00002D0000000000000001 /* BreathSynth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreathSynth.swift; sourceTree = "<group>"; };
@@ -46,6 +49,7 @@
 		AA0000330000000000000001 /* SceneDrawing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDrawing.swift; sourceTree = "<group>"; };
 		AA0000350000000000000001 /* SkyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkyView.swift; sourceTree = "<group>"; };
 		AA0000370000000000000001 /* Controls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Controls.swift; sourceTree = "<group>"; };
+		AA0000500000000000000001 /* SettingsFan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsFan.swift; sourceTree = "<group>"; };
 		AA0000390000000000000001 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		AA00003B0000000000000001 /* SessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionView.swift; sourceTree = "<group>"; };
 		AA00003D0000000000000001 /* DoneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoneView.swift; sourceTree = "<group>"; };
@@ -116,6 +120,7 @@
 				AA0000330000000000000001 /* SceneDrawing.swift */,
 				AA0000350000000000000001 /* SkyView.swift */,
 				AA0000370000000000000001 /* Controls.swift */,
+				AA0000500000000000000001 /* SettingsFan.swift */,
 				AA0000390000000000000001 /* HomeView.swift */,
 				AA00003B0000000000000001 /* SessionView.swift */,
 				AA00003D0000000000000001 /* DoneView.swift */,
@@ -139,6 +144,7 @@
 				AA00002D0000000000000001 /* BreathSynth.swift */,
 				AA0000410000000000000001 /* DaySky.swift */,
 				AA0000430000000000000001 /* LiquidPicker.swift */,
+				AA0000520000000000000001 /* IconPaths.swift */,
 				AA0000450000000000000001 /* VoiceClips.swift */,
 			);
 			path = Core;
@@ -231,6 +237,7 @@
 				AA00002A0000000000000001 /* BreathTimeline.swift in Sources */,
 				AA0000400000000000000001 /* DaySky.swift in Sources */,
 				AA0000420000000000000001 /* LiquidPicker.swift in Sources */,
+				AA0000510000000000000001 /* IconPaths.swift in Sources */,
 				AA00002C0000000000000001 /* BreathSynth.swift in Sources */,
 				AA0000440000000000000001 /* VoiceClips.swift in Sources */,
 				AA0000460000000000000001 /* VoiceLoader.swift in Sources */,
@@ -240,6 +247,7 @@
 				AA0000320000000000000001 /* SceneDrawing.swift in Sources */,
 				AA0000340000000000000001 /* SkyView.swift in Sources */,
 				AA0000360000000000000001 /* Controls.swift in Sources */,
+				AA00004F0000000000000001 /* SettingsFan.swift in Sources */,
 				AA0000380000000000000001 /* HomeView.swift in Sources */,
 				AA00003A0000000000000001 /* SessionView.swift in Sources */,
 				AA00003C0000000000000001 /* DoneView.swift in Sources */,
