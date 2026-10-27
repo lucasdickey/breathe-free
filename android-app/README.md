@@ -52,7 +52,7 @@ both.
 ```bash
 cd android-app
 ./gradlew assembleRelease      # app/build/outputs/apk/release/app-release.apk
-./gradlew bundleRelease       # app/build/outputs/bundle/release/app-release.aab, for Google Play
+./gradlew bundleRelease        # app/build/outputs/bundle/release/app-release.aab, for Google Play
 ./gradlew testDebugUnitTest    # timeline, sound and audio-thread tests
 ```
 
