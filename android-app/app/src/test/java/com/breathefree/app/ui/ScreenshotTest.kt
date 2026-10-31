@@ -101,7 +101,13 @@ class ScreenshotTest {
         controller.chooseCycles(2)
         compose.setContent { BreatheApp(controller) { today(12, 30) } }
         compose.mainClock.advanceTimeBy(2_500)
-        session(controller, "noon", listOf(3.0 to "2-settle", 9.9 to "3-inhale", 17.6 to "5-exhale", SessionPlan(2).endTime + 2.5 to "7-done"))
+        session(
+            controller, "noon",
+            listOf(
+                3.0 to "2-settle", 9.9 to "3-inhale", 15.4 to "4-gust-leaving", 15.75 to "4-gust-crossing",
+                16.3 to "4-gust-landing", 17.6 to "5-exhale", SessionPlan(2).endTime + 2.5 to "7-done",
+            ),
+        )
     }
 
     @Test

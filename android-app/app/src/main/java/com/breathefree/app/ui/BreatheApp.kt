@@ -81,6 +81,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.breathefree.app.ActiveSession
@@ -88,6 +89,7 @@ import com.breathefree.app.BreatheController
 import com.breathefree.app.Screen
 import com.breathefree.app.core.SessionPlan
 import com.breathefree.app.core.Stage
+import com.breathefree.app.core.gustAt
 import java.time.ZonedDateTime
 import kotlin.math.PI
 import kotlin.math.ceil
@@ -174,7 +176,7 @@ fun BreatheApp(controller: BreatheController, clock: () -> ZonedDateTime = { Zon
             Crossfade(targetState = screen, animationSpec = tween(700), label = "screen") { s ->
                 when (s) {
                     Screen.HOME -> HomeScreen(controller, frameNanos)
-                    Screen.SESSION -> controller.session?.let { SessionScreen(controller, it, frameNanos, leadNanos) }
+                    Screen.SESSION -> controller.session?.let { SessionScreen(controller, it, frameNanos, leadNanos, stillClouds) }
                     Screen.DONE -> DoneScreen(controller, frameNanos)
                 }
             }
@@ -294,6 +296,8 @@ private fun SessionScreen(
     active: ActiveSession,
     frameNanos: State<Long>,
     leadNanos: Long,
+    // With animations off in the system settings, the words cross in place instead of on the wind.
+    stillWords: Boolean,
 ) {
     val ink = LocalInk.current
     val painter = remember { SessionPainter() }
@@ -349,6 +353,8 @@ private fun SessionScreen(
         val g = remember(w, h) { SceneGeometry.of(w, h) }
         val promptY = g.cy + g.half + with(density) { 58.dp.toPx() }
         val hintY = promptY + with(density) { 38.dp.toPx() }
+        // The clear sky under the words, down to just above the cycle count, for the specks on the low road.
+        val room = (h - WindowInsets.safeDrawing.getBottom(density) - with(density) { 100.dp.toPx() } - promptY).coerceAtLeast(0f)
 
         Canvas(Modifier.fillMaxSize().graphicsLayer { alpha = sceneAlpha }) {
             val t = active.timeAt(frameNanos.value + leadNanos)
@@ -369,9 +375,10 @@ private fun SessionScreen(
             )
         }
 
-        // The words before fade out as the new ones fade in, each centred on its own, both
-        // worked out from the session clock like everything else here.
+        // The words, worked out from the session clock like everything else here.
         val promptStyle = TextStyle(color = ink.deep, fontSize = 30.sp, fontWeight = FontWeight.Light, letterSpacing = 0.5.sp)
+        val measurer = rememberTextMeasurer()
+        val wind = remember(measurer, density) { WindWords(measurer, promptStyle, density) }
         if (paused) {
             BasicText(
                 "Paused",
@@ -384,23 +391,38 @@ private fun SessionScreen(
                 style = TextStyle(color = ink.soft, fontSize = 15.sp),
             )
         } else {
-            fun fade() = plan.promptAt(active.timeAt(frameNanos.value + leadNanos)).fade.toFloat()
-            BasicText(
-                words.second,
-                Modifier
-                    .centerAt(g.cx, promptY)
-                    .graphicsLayer { alpha = 1f - fade() }
-                    .clearAndSetSemantics { },
-                style = promptStyle,
-            )
-            BasicText(
-                words.first,
-                Modifier
-                    .centerAt(g.cx, promptY)
-                    .graphicsLayer { alpha = fade() }
-                    .semantics { liveRegion = LiveRegionMode.Polite },
-                style = promptStyle,
-            )
+            if (!stillWords) {
+                // Specks of ink on the wind: in from the left, off to the right as the next words come.
+                Canvas(Modifier.fillMaxSize()) {
+                    val t = active.timeAt(frameNanos.value + leadNanos)
+                    wind.draw(this, plan.gustAt(t), g.cx, promptY, room, plan.frameAt(t).level, t, ink.deep)
+                }
+                // What the specks spell, for TalkBack: the words themselves, where they are drawn, in no colour.
+                BasicText(
+                    words.first,
+                    Modifier.centerAt(g.cx, promptY).semantics { liveRegion = LiveRegionMode.Polite },
+                    style = promptStyle.copy(color = Color.Transparent),
+                )
+            } else {
+                // The words before fade out as the new ones fade in, each centred on its own.
+                fun fade() = plan.promptAt(active.timeAt(frameNanos.value + leadNanos)).fade.toFloat()
+                BasicText(
+                    words.second,
+                    Modifier
+                        .centerAt(g.cx, promptY)
+                        .graphicsLayer { alpha = 1f - fade() }
+                        .clearAndSetSemantics { },
+                    style = promptStyle,
+                )
+                BasicText(
+                    words.first,
+                    Modifier
+                        .centerAt(g.cx, promptY)
+                        .graphicsLayer { alpha = fade() }
+                        .semantics { liveRegion = LiveRegionMode.Polite },
+                    style = promptStyle,
+                )
+            }
             if (hint.isNotEmpty()) {
                 BasicText(
                     hint,
