@@ -4,12 +4,14 @@ import android.content.Context
 import android.graphics.Color as AndroidColor
 import android.provider.Settings
 import android.view.View
+import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -23,6 +25,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -33,6 +36,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -64,6 +69,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.layout
@@ -84,6 +90,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.breathefree.app.ActiveSession
 import com.breathefree.app.BreatheController
 import com.breathefree.app.Screen
@@ -261,7 +270,7 @@ private fun HomeScreen(controller: BreatheController, frameNanos: State<Long>) {
             PrimaryButton("Begin", onClick = controller::begin, modifier = Modifier.widthIn(max = 240.dp))
         }
 
-        // Sound, voice and vibration, folded into the button in the top-right corner.
+        // Sound, voice, vibration and focus mode, folded into the button in the top-right corner.
         SettingsFan(
             open = settingsOpen,
             onOpen = { settingsOpen = it },
@@ -271,6 +280,8 @@ private fun HomeScreen(controller: BreatheController, frameNanos: State<Long>) {
             onVoice = controller::chooseVoice,
             vibrate = controller.hapticsOn,
             onVibrate = controller::chooseHaptics,
+            focus = controller.focusOn,
+            onFocus = controller::chooseFocus,
             modifier = Modifier.fillMaxSize(),
         )
     }
@@ -290,6 +301,8 @@ private class Places {
 
 // ---------------------------------------------------------------- Session
 
+// For the bars' places while they're hidden (WindowInsets.systemBarsIgnoringVisibility).
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SessionScreen(
     controller: BreatheController,
@@ -346,7 +359,36 @@ private fun SessionScreen(
     var volumeOpen by remember { mutableStateOf(false) }
     BackHandler(enabled = volumeOpen) { volumeOpen = false }
 
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    // Focus mode: the top bar and the count keep out of sight, and the phone's own bars with
+    // them, until the screen is touched; then they stay a few seconds from the last touch. They
+    // stay while the session is paused or ✕ or the volume is open, and for a few seconds after.
+    // With TalkBack on they always stay, as it can't find what isn't there.
+    val talkBack = rememberTouchExploration()
+    var touches by remember { mutableIntStateOf(0) }
+    var touchedLately by remember { mutableStateOf(true) }
+    LaunchedEffect(touches, paused, endOpen, volumeOpen) {
+        touchedLately = true
+        delay(FOCUS_SHOWN_MS)
+        touchedLately = false
+    }
+    val tucked = controller.focusOn && !talkBack && !touchedLately && !paused && !endOpen && !volumeOpen
+    val away = animateFloatAsState(if (tucked) 1f else 0f, tween(if (tucked) 600 else 300, easing = FastOutSlowInEasing), label = "focus")
+    PhoneBars(hidden = tucked)
+    // Where the bars are even while they're hidden, so nothing moves as they come and go.
+    val bars = WindowInsets.safeDrawing.union(WindowInsets.systemBarsIgnoringVisibility)
+
+    BoxWithConstraints(
+        Modifier
+            .fillMaxSize()
+            // Any touch brings focus mode's controls back, and goes on to whatever it touched.
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        if (awaitPointerEvent(PointerEventPass.Initial).type == PointerEventType.Press) touches++
+                    }
+                }
+            },
+    ) {
         val density = LocalDensity.current
         val w = constraints.maxWidth.toFloat()
         val h = constraints.maxHeight.toFloat()
@@ -354,7 +396,7 @@ private fun SessionScreen(
         val promptY = g.cy + g.half + with(density) { 58.dp.toPx() }
         val hintY = promptY + with(density) { 38.dp.toPx() }
         // The clear sky under the words, down to just above the cycle count, for the specks on the low road.
-        val room = (h - WindowInsets.safeDrawing.getBottom(density) - with(density) { 100.dp.toPx() } - promptY).coerceAtLeast(0f)
+        val room = (h - bars.getBottom(density) - with(density) { 100.dp.toPx() } - promptY).coerceAtLeast(0f)
 
         Canvas(Modifier.fillMaxSize().graphicsLayer { alpha = sceneAlpha }) {
             val t = active.timeAt(frameNanos.value + leadNanos)
@@ -436,7 +478,8 @@ private fun SessionScreen(
         Box(
             Modifier
                 .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .tucked(away, tucked, up = true)
+                .windowInsetsPadding(bars)
                 .padding(horizontal = 16.dp, vertical = 10.dp),
         ) {
             Box(Modifier.align(Alignment.CenterStart)) {
@@ -468,7 +511,8 @@ private fun SessionScreen(
         Column(
             Modifier
                 .align(Alignment.BottomCenter)
-                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .tucked(away, tucked, up = false)
+                .windowInsetsPadding(bars)
                 .padding(bottom = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -507,7 +551,7 @@ private fun SessionScreen(
                 onLeftAlone = { volumeOpen = false },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .windowInsetsPadding(bars)
                     // Just under the top bar's buttons (10 dp in, 44 dp high).
                     .padding(top = 62.dp, end = 16.dp),
             )
@@ -521,6 +565,48 @@ private const val END_READY_MS = 300L
 
 /** How long the volume slider stays open once it is left alone. */
 private const val VOLUME_OPEN_MS = 3_500L
+
+/** How long focus mode's controls stay in sight after the last touch. */
+private const val FOCUS_SHOWN_MS = 3_000L
+
+/**
+ * Focus mode's controls, slid off to the nearest edge ([up], or down) and faded as [away] goes
+ * from 0 to 1; once [tucked], out of TalkBack's reach too.
+ */
+private fun Modifier.tucked(away: State<Float>, tucked: Boolean, up: Boolean) =
+    graphicsLayer {
+        translationY = (if (up) -size.height else size.height) * away.value
+        alpha = 1f - away.value
+    }.then(if (tucked) Modifier.clearAndSetSemantics { } else Modifier)
+
+/**
+ * Hides the phone's status and navigation bars while [hidden], as in a video; a swipe in from
+ * the edge still brings them back for a moment.
+ */
+@Composable
+private fun PhoneBars(hidden: Boolean) {
+    val view = LocalView.current
+    val window = LocalActivity.current?.window ?: return
+    DisposableEffect(window, hidden) {
+        val bars = WindowCompat.getInsetsController(window, view)
+        bars.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (hidden) bars.hide(WindowInsetsCompat.Type.systemBars()) else bars.show(WindowInsetsCompat.Type.systemBars())
+        onDispose { if (hidden) bars.show(WindowInsetsCompat.Type.systemBars()) }
+    }
+}
+
+/** Whether TalkBack (or anything else that explores by touch) is on, kept up to date. */
+@Composable
+private fun rememberTouchExploration(): Boolean {
+    val manager = LocalContext.current.getSystemService(AccessibilityManager::class.java)
+    var on by remember(manager) { mutableStateOf(manager?.isTouchExplorationEnabled == true) }
+    DisposableEffect(manager) {
+        val listener = AccessibilityManager.TouchExplorationStateChangeListener { on = it }
+        manager?.addTouchExplorationStateChangeListener(listener)
+        onDispose { manager?.removeTouchExplorationStateChangeListener(listener) }
+    }
+    return on
+}
 
 /** What the speaker says it is: how loud, and with the voice on, the tone and the voice apart. */
 private fun volumeDescription(tone: Float, voice: Float?): String {

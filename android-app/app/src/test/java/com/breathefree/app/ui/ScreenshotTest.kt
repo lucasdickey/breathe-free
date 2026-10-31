@@ -3,13 +3,16 @@ package com.breathefree.app.ui
 import android.content.Context
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ApplicationProvider
 import com.breathefree.app.BreatheController
 import com.breathefree.app.Screen
@@ -123,6 +126,21 @@ class ScreenshotTest {
     }
 
     @Test
+    fun focusModeAtNight() {
+        val controller = controller()
+        controller.chooseCycles(2)
+        controller.chooseFocus(true)
+        compose.setContent { BreatheApp(controller) { today(20, 44) } }
+        compose.mainClock.advanceTimeBy(2_500)
+        session(controller, "focus-night", listOf(1.0 to "1-starting", 9.9 to "2-tucked"))
+        compose.onRoot().performTouchInput { click(Offset(width * 0.2f, height * 0.75f)) }
+        compose.mainClock.advanceTimeBy(130)
+        shot("focus-night-3-coming")
+        compose.mainClock.advanceTimeBy(400)
+        shot("focus-night-4-in-sight")
+    }
+
+    @Test
     fun endSessionOpenAtNoon() {
         val controller = controller()
         controller.chooseCycles(2)
@@ -200,7 +218,7 @@ class ScreenshotTest {
         assertEquals(Screen.HOME, controller.screen)
     }
 
-    private val fanButton get() = compose.onNodeWithContentDescription("Sound, voice and vibration")
+    private val fanButton get() = compose.onNodeWithContentDescription("Settings")
 
     /** The settings fan at [time]: folded, opening, open, its settings changed, folding and folded. */
     private fun fanShots(prefix: String, time: ZonedDateTime) {

@@ -86,6 +86,13 @@ class BreatheController(
     var voiceOn by mutableStateOf(prefs.getBoolean(KEY_VOICE, true))
         private set
 
+    /**
+     * Focus mode: during a session the top bar, the cycle count and the phone's own bars keep
+     * out of sight until the screen is touched. Off until switched on.
+     */
+    var focusOn by mutableStateOf(prefs.getBoolean(KEY_FOCUS, false))
+        private set
+
     private var voiceClips: Future<VoiceClips?>? = null
 
     var screen by mutableStateOf(Screen.HOME)
@@ -114,6 +121,11 @@ class BreatheController(
     fun chooseHaptics(on: Boolean) {
         hapticsOn = on
         prefs.edit().putBoolean(KEY_HAPTICS, on).apply()
+    }
+
+    fun chooseFocus(on: Boolean) {
+        focusOn = on
+        prefs.edit().putBoolean(KEY_FOCUS, on).apply()
     }
 
     fun chooseVoice(on: Boolean) {
@@ -245,6 +257,7 @@ class BreatheController(
         const val KEY_VOLUME = "volume"
         const val KEY_VOICE = "voice"
         const val KEY_VOICE_VOLUME = "voiceVolume"
+        const val KEY_FOCUS = "focus"
         const val DEFAULT_VOLUME = 1f // as loud as it played before it had a slider
         const val VOICE_WAIT_MS = 1_500L
         const val LEAD_NANOS = 350_000_000L
