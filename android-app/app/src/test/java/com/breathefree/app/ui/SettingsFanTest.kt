@@ -36,7 +36,7 @@ import java.time.ZonedDateTime
 import kotlin.math.sqrt
 
 /**
- * Sound, voice and vibration, folded into the button in the home screen's top-right corner: it
+ * Sound, voice, vibration and focus mode, folded into the button in the home screen's top-right corner: it
  * opens into a fan of drops, left of the button and down below it, each changing its setting
  * and leaving the fan open. The ✕, a touch anywhere else (which goes no further) or Back folds
  * it, and folded, its drops can't be pressed or found.
@@ -50,7 +50,7 @@ class SettingsFanTest {
 
     private val noon = ZonedDateTime.of(2026, 10, 7, 12, 30, 0, 0, ZoneId.of("America/Los_Angeles"))
     private val context get() = ApplicationProvider.getApplicationContext<Context>()
-    private val drops = listOf("Sound", "Voice guidance", "Vibrate at each change")
+    private val drops = listOf("Sound", "Voice guidance", "Vibrate at each change", "Focus mode")
 
     private fun home(): BreatheController {
         val controller = BreatheController(context, loadVoice = { null }) { 0L }
@@ -60,7 +60,7 @@ class SettingsFanTest {
         return controller
     }
 
-    private val button get() = compose.onNodeWithContentDescription("Sound, voice and vibration")
+    private val button get() = compose.onNodeWithContentDescription("Settings")
 
     private fun tapTheButton() {
         button.performClick()
@@ -88,15 +88,17 @@ class SettingsFanTest {
     }
 
     @Test
-    fun openTheDropsSitLeftOfTheButtonOnTheDiagonalAndBelowIt() {
+    fun openTheDropsShareTheQuarterCircleFromLeftOfTheButtonToBelowIt() {
         home()
         tapTheButton()
         val (bx, by) = button.getBoundsInRoot().centre
         // In the corner, where a session's speaker is: 16 dp in and 10 dp down, 44 dp across.
         assertEquals(400f - 16f - 22f, bx, 0.5f)
         assertEquals(10f + 22f, by, 0.5f)
-        val diagonal = 92f / sqrt(2f)
-        for ((name, place) in drops.zip(listOf(-92f to 0f, -diagonal to diagonal, 0f to 92f))) {
+        // Four, 30 degrees apart, 112 dp out.
+        val near = 112f * sqrt(3f) / 2
+        val far = 112f / 2
+        for ((name, place) in drops.zip(listOf(-112f to 0f, -near to far, -far to near, 0f to 112f))) {
             val (x, y) = compose.onNodeWithContentDescription(name).getBoundsInRoot().centre
             assertEquals("$name across", place.first, x - bx, 0.5f)
             assertEquals("$name down", place.second, y - by, 0.5f)
@@ -133,6 +135,23 @@ class SettingsFanTest {
         assertFalse(BreatheController(context, loadVoice = { null }).hapticsOn)
         // Nothing else changes.
         assertTrue(controller.voiceOn)
+        assertEquals(SoundMode.AMBIENT, controller.soundMode)
+    }
+
+    @Test
+    fun focusModeIsItsOwnSwitchOffAtFirst() {
+        val controller = home()
+        tapTheButton()
+        val focus = compose.onNodeWithContentDescription("Focus mode")
+        focus.assertIsOff()
+        focus.performClick()
+        compose.mainClock.advanceTimeBy(150)
+        focus.assertIsOn()
+        assertTrue(controller.focusOn)
+        assertTrue(BreatheController(context, loadVoice = { null }).focusOn)
+        // Nothing else changes.
+        assertTrue(controller.voiceOn)
+        assertTrue(controller.hapticsOn)
         assertEquals(SoundMode.AMBIENT, controller.soundMode)
     }
 
