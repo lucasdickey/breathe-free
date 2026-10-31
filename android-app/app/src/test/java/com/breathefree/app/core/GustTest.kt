@@ -13,9 +13,10 @@ class GustTest {
     /** A phone 400 dp wide at 3 pixels to the dp, as in the screenshots. */
     private val unit = 3f
     private val reach = 1200f
+    private val room = 600f
 
-    private fun at(tx: Float, ty: Float, along: Float, seed: Int, arrive: Double, leave: Double, t: Double = 10.0): FloatArray {
-        Gust.place(tx, ty, along, seed, arrive, leave, reach, unit, 0.0, t, out)
+    private fun at(tx: Float, ty: Float, along: Float, seed: Int, arrive: Double, leave: Double, t: Double = 10.0, room: Float = this.room): FloatArray {
+        Gust.place(tx, ty, along, seed, arrive, leave, reach, room, unit, 0.0, t, out)
         return out.copyOf()
     }
 
@@ -116,6 +117,35 @@ class GustTest {
                 s += 0.01
             }
         }
+    }
+
+    @Test
+    fun aFewSpecksTakeTheLowRoad() {
+        // About a quarter of the specks rise into place from the clear sky below the words and
+        // sink back into it as they go, each to its own depth but never past the clear sky.
+        fun deepest(seed: Int, room: Float): Float {
+            var y = Float.NEGATIVE_INFINITY
+            var s = 0.0
+            while (s < Gust.ARRIVED) {
+                val p = at(0f, 0f, 0.5f, seed, s, -1.0, t = s, room = room)
+                if (p[2] > 0.02f) y = maxOf(y, p[1])
+                s += 0.01
+            }
+            s = 0.0
+            while (s < Gust.GONE) {
+                val p = at(0f, 0f, 0.5f, seed, Gust.ARRIVED + 1, s, t = s, room = room)
+                if (p[2] > 0.02f) y = maxOf(y, p[1])
+                s += 0.01
+            }
+            return y
+        }
+        var low = 0
+        for (seed in 0 until 1000) {
+            val drop = deepest(seed, room) - deepest(seed, 0f)
+            assertTrue("seed $seed sinks ${drop / unit} dp under its band", drop <= room)
+            if (drop > 0.2f * room) low++
+        }
+        assertTrue("$low of 1000 take the low road", low in 150..250)
     }
 
     @Test

@@ -63,6 +63,7 @@ class WindClearanceTest {
         val wind = WindWords(measurer, style, density)
         val unit = density.density
         val reach = 400f * unit
+        val room = 200f * unit
         val out = FloatArray(3)
         var settled = 0f
         var top = 0f
@@ -74,13 +75,13 @@ class WindClearanceTest {
                 settled = minOf(settled, s.ys[i] * (1f + Gust.SWELL.toFloat()))
                 var a = 0.0
                 while (a <= Gust.ARRIVED) {
-                    Gust.place(s.xs[i], s.ys[i], s.along[i], i, a, -1.0, reach, unit, 1.0, 8.0 + a, out)
+                    Gust.place(s.xs[i], s.ys[i], s.along[i], i, a, -1.0, reach, room, unit, 1.0, 8.0 + a, out)
                     if (out[2] > 0.02f) top = minOf(top, out[1])
                     a += frame
                 }
                 var l = 0.0
                 while (l <= Gust.GONE) {
-                    Gust.place(s.xs[i], s.ys[i], s.along[i], i, Gust.ARRIVED + 1, l, reach, unit, 1.0, 11.2 + l, out)
+                    Gust.place(s.xs[i], s.ys[i], s.along[i], i, Gust.ARRIVED + 1, l, reach, room, unit, 1.0, 11.2 + l, out)
                     if (out[2] > 0.02f) top = minOf(top, out[1])
                     l += frame
                 }

@@ -54,17 +54,17 @@ class WindWords(private val measurer: TextMeasurer, private val style: TextStyle
     fun specks(text: String): WordSpecks = words.getOrPut(text) { sample(text) }
 
     /**
-     * Draws [gust]'s words centred on ([cx], [cy]) in [color]: [level] is how full the lungs are,
-     * and [t] session time.
+     * Draws [gust]'s words centred on ([cx], [cy]) in [color], with the sky clear for [room]
+     * pixels below them: [level] is how full the lungs are, and [t] session time.
      */
-    fun draw(scope: DrawScope, gust: GustWords, cx: Float, cy: Float, level: Double, t: Double, color: Color) = with(scope) {
+    fun draw(scope: DrawScope, gust: GustWords, cx: Float, cy: Float, room: Float, level: Double, t: Double, color: Color) = with(scope) {
         counts.fill(0)
         val reach = size.width
         if (gust.leaving.isNotEmpty() && gust.leaveSince < Gust.GONE) {
-            add(specks(gust.leaving), Gust.ARRIVED + 1.0, gust.leaveSince, cx, cy, reach, level, t)
+            add(specks(gust.leaving), Gust.ARRIVED + 1.0, gust.leaveSince, cx, cy, reach, room, level, t)
         }
         if (gust.arriving.isNotEmpty()) {
-            add(specks(gust.arriving), gust.arriveSince, -1.0, cx, cy, reach, level, t)
+            add(specks(gust.arriving), gust.arriveSince, -1.0, cx, cy, reach, room, level, t)
         }
         paint.strokeWidth = step * 1.25f
         drawIntoCanvas { canvas ->
@@ -78,10 +78,10 @@ class WindWords(private val measurer: TextMeasurer, private val style: TextStyle
 
     private fun add(
         w: WordSpecks, arriveSince: Double, leaveSince: Double,
-        cx: Float, cy: Float, reach: Float, level: Double, t: Double,
+        cx: Float, cy: Float, reach: Float, room: Float, level: Double, t: Double,
     ) {
         for (i in 0 until w.size) {
-            Gust.place(w.xs[i], w.ys[i], w.along[i], i, arriveSince, leaveSince, reach, unit, level, t, place)
+            Gust.place(w.xs[i], w.ys[i], w.along[i], i, arriveSince, leaveSince, reach, room, unit, level, t, place)
             val a = place[2] * w.ink[i]
             val bucket = (a * LEVELS).roundToInt() - 1
             if (bucket < 0) continue

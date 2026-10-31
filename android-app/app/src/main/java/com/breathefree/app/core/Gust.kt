@@ -15,7 +15,8 @@ data class GustWords(val arriving: String, val arriveSince: Double, val leaving:
  * The words as specks of ink on the wind. Each word is blown in from the left, its left end
  * landing first, and settles under the box; the gust that brings the next word carries it off to
  * the right. The specks stay in a band round the words, so the wind passes under the box and orb
- * rather than across them. Everything is a function of session time, like the rest of the
+ * rather than across them; a few rise into place out of the clear sky below the words and sink
+ * back into it as they go. Everything is a function of session time, like the rest of the
  * screen, so a paused session holds the specks where they are.
  */
 object Gust {
@@ -55,6 +56,12 @@ object Gust {
     const val WANDER = 0.02f
     const val WANDER_ACROSS = 5f
 
+    /**
+     * The share of specks that take the low road: up out of the clear sky from the lower left,
+     * and down into it to the lower right, each to its own depth.
+     */
+    const val LOW = 0.25f
+
     /** How far a settled word swells with full lungs. */
     const val SWELL = 0.03
 
@@ -65,13 +72,14 @@ object Gust {
      * [tx], [ty] is where it belongs in the word, [along] how far across the word that is (0 the
      * left end, 1 the right), and [seed] picks its own path. [arriveSince] is the seconds since its
      * word started blowing in, [leaveSince] since it started blowing away (negative until then).
-     * [reach] is how far the wind carries it, the screen's width; [unit] is one dp in pixels;
-     * [level] is how full the lungs are, and [t] session time, for the settled specks' shimmer.
+     * [reach] is how far the wind carries it, the screen's width, and [room] how far below the
+     * words the sky is clear; [unit] is one dp in pixels; [level] is how full the lungs are, and
+     * [t] session time, for the settled specks' shimmer.
      */
     fun place(
         tx: Float, ty: Float, along: Float, seed: Int,
         arriveSince: Double, leaveSince: Double,
-        reach: Float, unit: Float, level: Double, t: Double,
+        reach: Float, room: Float, unit: Float, level: Double, t: Double,
         out: FloatArray,
     ) {
         val swell = 1f + (SWELL * level).toFloat()
@@ -90,6 +98,9 @@ object Gust {
         y += sin(PI * e).toFloat() * (luck(seed, 3) - 0.5f) * 24f * unit
         x += sin(t * 3.0 + luck(seed, 4) * TAU).toFloat() * swirl
         y += cos(t * 2.3 + luck(seed, 5) * TAU).toFloat() * swirl
+        // Taking the low road, it comes up from below as it closes in, rising into place.
+        val low = maxOf(0f, (luck(seed, 19) - (1 - LOW)) / LOW) * room
+        y += low * ((1 - q) * (1 - q)).toFloat()
         var alpha = smoothstep(0.0, 0.35, q)
         // Off its line until it is nearly down, so the specks don't come in on rails.
         var stray = 1f - smoothstep(0.3, 1.0, q).toFloat()
@@ -107,6 +118,8 @@ object Gust {
             val gusting = minOf(1f, 3f * g) * 6f * unit
             x += g * reach * (0.5f + 0.4f * luck(seed, 1)) + sin(t * 3.0 + luck(seed, 4) * TAU).toFloat() * gusting
             y += g * unit * (-10f + 36f * luck(seed, 9)) + cos(t * 2.3 + luck(seed, 5) * TAU).toFloat() * gusting
+            // On the low road it sinks as it goes, down and away to the lower right.
+            y += low * p.pow(1.5).toFloat()
             alpha *= 1.0 - smoothstep(0.35, 1.0, p)
             stray += smoothstep(0.0, 0.6, p).toFloat()
         }

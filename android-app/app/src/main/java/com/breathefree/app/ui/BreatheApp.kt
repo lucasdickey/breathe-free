@@ -353,6 +353,8 @@ private fun SessionScreen(
         val g = remember(w, h) { SceneGeometry.of(w, h) }
         val promptY = g.cy + g.half + with(density) { 58.dp.toPx() }
         val hintY = promptY + with(density) { 38.dp.toPx() }
+        // The clear sky under the words, down to just above the cycle count, for the specks on the low road.
+        val room = (h - WindowInsets.safeDrawing.getBottom(density) - with(density) { 100.dp.toPx() } - promptY).coerceAtLeast(0f)
 
         Canvas(Modifier.fillMaxSize().graphicsLayer { alpha = sceneAlpha }) {
             val t = active.timeAt(frameNanos.value + leadNanos)
@@ -393,7 +395,7 @@ private fun SessionScreen(
                 // Specks of ink on the wind: in from the left, off to the right as the next words come.
                 Canvas(Modifier.fillMaxSize()) {
                     val t = active.timeAt(frameNanos.value + leadNanos)
-                    wind.draw(this, plan.gustAt(t), g.cx, promptY, plan.frameAt(t).level, t, ink.deep)
+                    wind.draw(this, plan.gustAt(t), g.cx, promptY, room, plan.frameAt(t).level, t, ink.deep)
                 }
                 // What the specks spell, for TalkBack: the words themselves, where they are drawn, in no colour.
                 BasicText(
