@@ -42,6 +42,19 @@ object Gust {
     const val ARRIVED = ARRIVE_STAGGER + ARRIVE_SCATTER + ARRIVE_SECONDS
     const val GONE = LEAVE_STAGGER + LEAVE_SCATTER + LEAVE_SECONDS
 
+    /**
+     * Each speck's own pace: up to this much quicker than the slowest, so specks overtake one
+     * another rather than keeping step.
+     */
+    const val PACE = 0.12
+
+    /**
+     * How far a speck strays from its line while it is in the air, on slow gusts of its own: a
+     * share of the screen's width along the wind, and dp across it, little enough to keep under the box.
+     */
+    const val WANDER = 0.02f
+    const val WANDER_ACROSS = 5f
+
     /** How far a settled word swells with full lungs. */
     const val SWELL = 0.03
 
@@ -68,7 +81,7 @@ object Gust {
         // In from the left, out of a band a little above the words to a little below them,
         // swirling as it comes and steadying as it lands.
         val inDelay = along * ARRIVE_STAGGER + luck(seed, 0) * ARRIVE_SCATTER
-        val q = ((arriveSince - inDelay) / ARRIVE_SECONDS).coerceIn(0.0, 1.0)
+        val q = ((arriveSince - inDelay) / (ARRIVE_SECONDS * (1 - PACE * luck(seed, 13)))).coerceIn(0.0, 1.0)
         val e = easeOut(q).toFloat()
         val left = 1f - e
         val swirl = left * 6f * unit
@@ -78,6 +91,8 @@ object Gust {
         x += sin(t * 3.0 + luck(seed, 4) * TAU).toFloat() * swirl
         y += cos(t * 2.3 + luck(seed, 5) * TAU).toFloat() * swirl
         var alpha = smoothstep(0.0, 0.35, q)
+        // Off its line until it is nearly down, so the specks don't come in on rails.
+        var stray = 1f - smoothstep(0.3, 1.0, q).toFloat()
 
         // Settled, it stirs a little, as snow does in a breeze.
         x += sin(t * 1.7 + luck(seed, 6) * 9.0).toFloat() * 0.25f * unit
@@ -86,13 +101,19 @@ object Gust {
         // Off to the right, the left end of the word first, gathering speed and swirling as it goes.
         if (leaveSince > 0) {
             val outDelay = along * LEAVE_STAGGER + luck(seed, 8) * LEAVE_SCATTER
-            val p = ((leaveSince - outDelay) / LEAVE_SECONDS).coerceIn(0.0, 1.0)
+            val p = ((leaveSince - outDelay) / (LEAVE_SECONDS * (1 - PACE * luck(seed, 14)))).coerceIn(0.0, 1.0)
             // Moving off at once and swirling only as it picks up speed, so no letter shivers in place first.
             val g = (p * p).toFloat()
             val gusting = minOf(1f, 3f * g) * 6f * unit
             x += g * reach * (0.5f + 0.4f * luck(seed, 1)) + sin(t * 3.0 + luck(seed, 4) * TAU).toFloat() * gusting
             y += g * unit * (-10f + 36f * luck(seed, 9)) + cos(t * 2.3 + luck(seed, 5) * TAU).toFloat() * gusting
             alpha *= 1.0 - smoothstep(0.35, 1.0, p)
+            stray += smoothstep(0.0, 0.6, p).toFloat()
+        }
+
+        if (stray > 0f) {
+            x += stray * WANDER * reach * sin(t * (1.5 + 2.0 * luck(seed, 15)) + luck(seed, 16) * TAU).toFloat()
+            y += stray * WANDER_ACROSS * unit * sin(t * (1.5 + 2.0 * luck(seed, 17)) + luck(seed, 18) * TAU).toFloat()
         }
 
         out[0] = x
