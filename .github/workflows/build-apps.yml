@@ -89,7 +89,7 @@ jobs:
 
       - name: Test and build
         working-directory: android-app
-        run: ./gradlew --no-daemon testDebugUnitTest assembleRelease
+        run: ./gradlew --no-daemon testDebugUnitTest assembleRelease bundleRelease
 
       # apksigner's wording changes between versions ("Signer #1 certificate SHA-256
       # digest:" in 36, "V2 Signer: certificate SHA-256 digest:" in 37), so match only
@@ -110,7 +110,30 @@ jobs:
             exit 1
           fi
 
+      # Google Play takes the app bundle, not the APK. It is signed with the same key, which
+      # Play Console uses as the upload key; keytool prints its fingerprint as colon-separated
+      # upper-case hex, so it's compared after taking those out.
+      - name: Check the bundle's signing key
+        working-directory: android-app
+        run: |
+          cert="$(keytool -printcert -jarfile app/build/outputs/bundle/release/app-release.aab \
+            | sed -n 's/^[[:space:]]*SHA256: *//p' | tr -d ':' | tr 'A-F' 'a-f' | sort -u)"
+          echo "AAB certificate SHA-256: $cert"
+          if [ -z "$cert" ]; then
+            echo "::error::Couldn't read the app bundle's signing certificate."
+            exit 1
+          fi
+          if [ -f keystore.properties ] && [ "$cert" != "$RELEASE_CERT_SHA256" ]; then
+            echo "::error::The release key secrets are set, but the app bundle isn't signed with the release key."
+            exit 1
+          fi
+
       - uses: actions/upload-artifact@v4
         with:
           name: BreatheFree-android
           path: android-app/app/build/outputs/apk/release/app-release.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BreatheFree-android-bundle
+          path: android-app/app/build/outputs/bundle/release/app-release.aab

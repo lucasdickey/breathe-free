@@ -10,10 +10,10 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.breathefree.app"
+        applicationId = "dev.oneoff.breathefree"
         minSdk = 26
         targetSdk = 36
-        versionCode = 11
+        versionCode = 12
         versionName = "2.6"
     }
 
