@@ -298,7 +298,8 @@ class FanShape(val home: LiquidDrop, val drops: List<FanDrop>)
  * drops come out of the round button ([button] across) together, as one drop, to [distance]
  * from its centre, and swing round it from there, down toward below it, each 45 degrees
  * round from the one before, the fan centred on the quarter circle (two at 22.5
- * and 67.5 degrees, three at 0, 45 and 90), the later ones further, pulling free of the ones
+ * and 67.5 degrees, three at 0, 45 and 90; four share it, at 0, 30, 60 and 90), the later
+ * ones further, pulling free of the ones
  * before them as they go. A drop's out is 0 at home inside the button and 1 at its distance;
  * its sweep is 0 folded flat and 1 in its place. The rates say how fast they change (per
  * second), and [lit] how far each drop's setting is on. Kept in step with the browser
@@ -326,8 +327,10 @@ object LiquidFan {
         val drops = (0 until count).map { i ->
             val s = outs[i]
             // How far round from the button's left its place is, toward below: 45 degrees on
-            // from the one before, the fan centred on the quarter circle.
-            val swing = (PI.toFloat() / 4) * (1 + i - (count - 1) / 2f)
+            // from the one before, or for more than three, the quarter circle shared out among
+            // them; the fan centred on the quarter circle.
+            val step = if (count <= 3) PI.toFloat() / 4 else (PI.toFloat() / 2) / (count - 1)
+            val swing = PI.toFloat() / 4 + step * (i - (count - 1) / 2f)
             val angle = PI.toFloat() - swing * sweeps[i]
             val along = distance * s
             // Its velocity: out from the button, and round it.

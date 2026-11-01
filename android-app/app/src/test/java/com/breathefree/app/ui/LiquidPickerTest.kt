@@ -143,6 +143,16 @@ class LiquidPickerTest {
     }
 
     @Test
+    fun fourOpenDropsShareTheQuarterCircle() {
+        val open = fan(1f, 1f, count = 4)
+        for ((i, degrees) in listOf(0.0, 30.0, 60.0, 90.0).withIndex()) {
+            val d = open.drops[i]
+            assertEquals(-cos(turn(degrees)).toFloat() * fanDistance, d.x, 1e-3f)
+            assertEquals(sin(turn(degrees)).toFloat() * fanDistance, d.y, 1e-3f)
+        }
+    }
+
+    @Test
     fun foldedTheDropsWaitInsideTheButton() {
         val folded = fan(0f, 0f)
         assertEquals(22f, folded.home.radius, 1e-4f)

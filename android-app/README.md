@@ -29,9 +29,13 @@ is generated as it plays. See `../macos-app/README.md` for the full description.
   cycle count.
   Their paths are worked out from session time, so a paused session holds them still. With
   animations turned off in Android's settings they cross-fade in place, as on the Mac.
-- The settings fan (`ui/SettingsFan.kt`): Sound, Voice guidance and Vibrate fold into a
-  round button at the top right of the home screen and open out of it as drops of the
-  same liquid as session length (`ui/LiquidPicker.kt`, `LiquidFan`).
+- The settings fan (`ui/SettingsFan.kt`): Sound, Voice guidance, Vibrate and Focus mode
+  fold into a round button at the top right of the home screen and open out of it as drops
+  of the same liquid as session length (`ui/LiquidPicker.kt`, `LiquidFan`).
+- Focus mode (off until switched on): during a session the top bar, the cycle count and the
+  phone's status and navigation bars slide off to the nearest edge a few seconds in. Any
+  touch brings them back for three seconds. They stay while the session is paused, while
+  ✕ or the volume is open, and always with TalkBack on.
 - The voice ("Voice guidance", on from the first start): `audio/VoiceLoader.kt` decodes
   the three prompts in `res/raw` (AAC) with Android's own decoder, once, off the main thread;
   `core/VoiceClips.kt` trims each to its first sound and resamples it if the phone doesn't

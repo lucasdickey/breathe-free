@@ -61,14 +61,15 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-// Sound, voice and vibration, folded into one round button at the top right of the home screen,
+// Sound, voice, vibration and focus mode, folded into one round button at the top right of the home screen,
 // where a session's speaker is. Tapped, its sliders turn into a ✕ and the settings open out of
 // it as a fan of drops of the same liquid as the session-length circle (LiquidFan): out of the
 // button as one drop, then swinging round it, down and to the left, each pulling free of the
 // one before it, each showing its setting's icon. A tap on a drop changes that setting and
 // leaves the fan open, so more than one can be changed; the ✕, a touch anywhere else, or Back
 // folds it: the drops swing back into one and go home. A drop wears the lit colour while its
-// setting is on. Kept in step with the browser version's settings-fan.tsx.
+// setting is on. Kept in step with the browser version's settings-fan.tsx, which has no focus
+// mode yet.
 
 /** The drops, the size of the session-length circle's. */
 private val DROP = 48.dp
@@ -76,8 +77,12 @@ private val DROP = 48.dp
 /** The round button, the size of a session's. */
 private val BUTTON = 44.dp
 
-/** From the button's centre to each drop's: the browser version's spacing, for these sizes. */
-private val DISTANCE = 92.dp
+/**
+ * From the button's centre to each drop's. Four drops share the quarter circle, 30 degrees
+ * apart (LiquidFan), so they sit further out than the browser version's three, to keep 10 dp
+ * of sky between neighbours.
+ */
+private val DISTANCE = 112.dp
 
 /** Opening, the drops come out together; this long after, they start to swing round. */
 private const val SWEEP_AFTER_MS = 50L
@@ -118,13 +123,15 @@ fun SettingsFan(
     onVoice: (Boolean) -> Unit,
     vibrate: Boolean,
     onVibrate: (Boolean) -> Unit,
+    focus: Boolean,
+    onFocus: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val ink = LocalInk.current
     val setOpen by rememberUpdatedState(onOpen)
     BackHandler(enabled = open) { setOpen(false) }
 
-    val lit = listOf(sound != SoundMode.SILENT, voice, vibrate)
+    val lit = listOf(sound != SoundMode.SILENT, voice, vibrate, focus)
     val motion = remember { FanMotion(open, lit) }
 
     // Opening, the drops come out of the button together, then swing round to their places;
@@ -219,6 +226,14 @@ fun SettingsFan(
             ) { color ->
                 FanIcons.draw(this, if (vibrate) FanIcons.vibrateOn else FanIcons.vibrateOff, color)
             }
+            Drop(
+                motion, 3, open,
+                Modifier
+                    .toggleable(focus, interactionSource = null, indication = null, role = Role.Switch, onValueChange = onFocus)
+                    .semantics { contentDescription = "Focus mode" },
+            ) { color ->
+                FanIcons.draw(this, if (focus) FanIcons.focusOn else FanIcons.focusOff, color)
+            }
 
             // The button itself, over the drops waiting inside it.
             Box(
@@ -228,7 +243,7 @@ fun SettingsFan(
                         onOpen(!open)
                     }
                     .semantics {
-                        contentDescription = "Sound, voice and vibration"
+                        contentDescription = "Settings"
                         stateDescription = if (open) "Expanded" else "Collapsed"
                         traversalIndex = -1f
                     },
@@ -375,6 +390,12 @@ private object FanIcons {
     /** A phone buzzing, as Android's own ringer shows it; still, moved aside for the same cross. */
     val vibrateOn = path("M10.5 3.5h3a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2h-3a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2zM5 8.5v7M19 8.5v7M1.5 10.5v3M22.5 10.5v3")
     val vibrateOff = path("M6 3.5h3a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2h-3a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2zM15.5 9.5l5 5M20.5 9.5l-5 5")
+
+    /** A viewfinder's corners round one point; struck through, for everything in view. */
+    private const val FRAME = "M3 8V5.5A2.5 2.5 0 0 1 5.5 3H8M16 3h2.5A2.5 2.5 0 0 1 21 5.5V8" +
+        "M21 16v2.5a2.5 2.5 0 0 1-2.5 2.5H16M8 21H5.5A2.5 2.5 0 0 1 3 18.5V16M9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0z"
+    val focusOn = path(FRAME)
+    val focusOff = path("${FRAME}M6.5 17.5l11-11")
 
     fun draw(scope: DrawScope, path: Path, color: Color) = with(scope) {
         val k = size.minDimension / 24f

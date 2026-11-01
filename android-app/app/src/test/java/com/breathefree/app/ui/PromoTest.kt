@@ -177,7 +177,7 @@ class PromoTest {
         givePhoneBars(context)
 
         compose.mainClock.advanceTimeBy((v * 1000).roundToLong())
-        compose.onNodeWithContentDescription("Sound, voice and vibration").performClick()
+        compose.onNodeWithContentDescription("Settings").performClick()
         // Long enough for the drops to come to rest.
         compose.mainClock.advanceTimeBy(1_500)
         compose.waitForIdle()

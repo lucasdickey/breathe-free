@@ -58,7 +58,7 @@ class VoiceSwitchTest {
         compose.mainClock.autoAdvance = false // the orb and the sky never stop moving
         compose.setContent { BreatheApp(controller) { noon } }
         compose.mainClock.advanceTimeBy(500)
-        compose.onNodeWithContentDescription("Sound, voice and vibration").performClick()
+        compose.onNodeWithContentDescription("Settings").performClick()
         compose.mainClock.advanceTimeBy(800)
         val voice = compose.onNodeWithContentDescription("Voice guidance")
         voice.assertIsOn()
