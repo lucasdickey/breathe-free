@@ -16,6 +16,8 @@ struct SessionView: View {
     var endOpen = false
     @State private var showVolume = false
     @Environment(\.ink) private var ink
+    // With Reduce Motion on, the words cross in place instead of on the wind.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// A frame drawn now reaches the screen about one refresh later; aim the picture there.
     static let displayLead = 1.0 / 60.0
@@ -23,6 +25,9 @@ struct SessionView: View {
     var body: some View {
         GeometryReader { geo in
             let g = SceneGeometry.of(geo.size)
+            let promptY = g.cy + g.half + 58
+            // The clear sky under the words, down to just above the cycle count, for the specks on the low road.
+            let room = max(0, geo.size.height - 100 - promptY)
             TimelineView(.animation) { _ in
                 let t = session.time(at: MediaClock.now() + Self.displayLead)
                 let frame = session.plan.frame(at: t)
@@ -50,27 +55,43 @@ struct SessionView: View {
                         Text("Paused")
                             .font(.system(size: 30, weight: .light))
                             .foregroundColor(ink.deep.color)
-                            .position(x: g.cx, y: g.cy + g.half + 58)
+                            .position(x: g.cx, y: promptY)
                         Text("Press Space to carry on")
                             .font(.system(size: 15))
                             .foregroundColor(ink.soft.color)
                             .position(x: g.cx, y: g.cy + g.half + 96)
                     } else {
-                        // The words before fade out as the new ones fade in, each centred on
-                        // its own, both worked out from the session clock like everything else.
+                        // The words, worked out from the session clock like everything else.
                         let words = session.plan.prompt(at: t)
-                        Text(words.previous)
-                            .font(.system(size: 30, weight: .light))
-                            .foregroundColor(ink.deep.color)
-                            .opacity(1 - words.fade)
-                            .position(x: g.cx, y: g.cy + g.half + 58)
+                        if reduceMotion {
+                            // The words before fade out as the new ones fade in, each centred on its own.
+                            Text(words.previous)
+                                .font(.system(size: 30, weight: .light))
+                                .foregroundColor(ink.deep.color)
+                                .opacity(1 - words.fade)
+                                .position(x: g.cx, y: promptY)
+                                .accessibilityHidden(true)
+                            Text(words.text)
+                                .font(.system(size: 30, weight: .light))
+                                .foregroundColor(ink.deep.color)
+                                .opacity(words.fade)
+                                .position(x: g.cx, y: promptY)
+                                .accessibilityAddTraits(.updatesFrequently)
+                        } else {
+                            // Specks of ink on the wind: in from the left, off to the right as the next words come.
+                            Canvas { context, size in
+                                WindWords.shared.draw(&context, gust: session.plan.gust(at: t), cx: g.cx, cy: promptY,
+                                                      reach: size.width, room: room, level: frame.level, t: t,
+                                                      color: ink.deep)
+                            }
                             .accessibilityHidden(true)
-                        Text(words.text)
-                            .font(.system(size: 30, weight: .light))
-                            .foregroundColor(ink.deep.color)
-                            .opacity(words.fade)
-                            .position(x: g.cx, y: g.cy + g.half + 58)
-                            .accessibilityAddTraits(.updatesFrequently)
+                            // What the specks spell, for VoiceOver: the words themselves, where they are drawn, in no colour.
+                            Text(words.text)
+                                .font(.system(size: 30, weight: .light))
+                                .foregroundColor(.clear)
+                                .position(x: g.cx, y: promptY)
+                                .accessibilityAddTraits(.updatesFrequently)
+                        }
 
                         if frame.stage == .settle {
                             Text("Soften your shoulders and jaw")

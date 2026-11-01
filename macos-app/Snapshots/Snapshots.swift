@@ -95,6 +95,12 @@ struct Snapshots {
             shoot("\(name)-night", night, SessionView(model: model, session: session(at: t)))
         }
         shoot("3-inhale-noon", noon, SessionView(model: model, session: session(at: 9.9)))
+        // The gust from Hold to Breathe out: Hold starting to leave, the two words crossing, and
+        // Breathe out landing just after its phase begins.
+        for (name, t) in [("leaving", 15.4), ("crossing", 15.75), ("landing", 16.3)] {
+            shoot("5-gust-\(name)-noon", noon, SessionView(model: model, session: session(at: t)))
+            shoot("5-gust-\(name)-night", night, SessionView(model: model, session: session(at: t)))
+        }
         // Paused part way through a hold: the scene dims and the words give way to "Paused".
         let now = CACurrentMediaTime()
         let held = ActiveSession(plan: SessionPlan(cycles: 2), startTime: now - 13.6).paused(at: now)

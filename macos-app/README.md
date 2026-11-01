@@ -11,6 +11,14 @@ hold for four, with an eight-second settle at the start.
   breath itself.
 - **The orb** in the middle grows and shrinks with the same curve, and a soft ring
   leaves it at each change of phase.
+- **The words** ("Settle in", "Breathe in", "Hold", "Breathe out") are specks of ink on
+  the wind. Each word blows in from the left just before its phase, settles under the box,
+  and is carried off to the right by the gust that brings the next. Each speck strays a
+  little and keeps its own pace, and about a quarter rise into place from the lower left and
+  sink away to the lower right, through the clear sky above the cycle count. The specks keep
+  under the box, and a paused session holds them still. `Core/Gust.swift` is a port of the
+  Android app's `Gust.kt`, so every speck takes the same path on both. With Reduce Motion
+  on, the words cross-fade in place instead; VoiceOver reads them either way.
 - **The sky** follows the time of day: night with stars, blue hour, sunrise, day,
   golden hour, sunset and dusk, timed from that day's sunrise and sunset (worked out
   from the date, so no location is needed; `Core/DaySky.swift`). Text and buttons turn
@@ -87,7 +95,8 @@ swift test --package-path macos-app
 
 The tests check phase boundaries and countdowns, that every bell starts on the exact
 sample of its phase change, that the sound follows a device clock running fast, that
-the air layer is silent during holds, and that output never clips.
+the air layer is silent during holds, that output never clips, and that the words' specks
+pass under the box (followed through every gust, sampled from the real words on a Mac).
 
 ## Project layout
 
@@ -101,13 +110,16 @@ macos-app/
     ├── ContentView.swift         # sky behind; home, session or finish in front
     ├── Core/
     │   ├── BreathTimeline.swift  # the session laid out in time
-    │   └── BreathSynth.swift     # the generated sound
+    │   ├── BreathSynth.swift     # the generated sound
+    │   ├── Gust.swift            # the words' specks on the wind
+    │   └── WordSpecks.swift      # a word sampled into specks
     ├── Audio/SessionAudio.swift  # AVAudioEngine, aligned to the session clock
     ├── Models/
     │   ├── SessionModel.swift    # saved choices, screens, session start and end
     │   └── HapticManager.swift   # trackpad taps
     └── Views/
         ├── SceneDrawing.swift    # colours, clouds, orb, box
+        ├── WindWords.swift       # the words' specks, drawn
         ├── SkyView.swift
         ├── HomeView.swift
         ├── SessionView.swift
