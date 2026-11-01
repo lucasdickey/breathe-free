@@ -21,6 +21,14 @@ is generated as it plays. See `../macos-app/README.md` for the full description.
   Bluetooth delay on phones that report it). The synth bends its clock to match, so
   bells land on the boundaries the screen shows.
 - Haptic ticks fire from the frame loop, on the same clock.
+- The words ride the wind (`core/Gust.kt`, `ui/WindWords.kt`): each is set in the screen's
+  own face and sampled into specks of ink, blown in from the left just before its phase
+  and carried off to the right by the gust that brings the next, in a band under the box.
+  Each speck strays a little and keeps its own pace, and about a quarter rise into place
+  from the lower left and sink away to the lower right, through the clear sky above the
+  cycle count.
+  Their paths are worked out from session time, so a paused session holds them still. With
+  animations turned off in Android's settings they cross-fade in place, as on the Mac.
 - The settings fan (`ui/SettingsFan.kt`): Sound, Voice guidance and Vibrate fold into a
   round button at the top right of the home screen and open out of it as drops of the
   same liquid as session length (`ui/LiquidPicker.kt`, `LiquidFan`).
