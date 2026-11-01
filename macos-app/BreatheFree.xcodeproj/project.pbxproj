@@ -13,6 +13,9 @@
 		AA0000400000000000000001 /* DaySky.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000410000000000000001 /* DaySky.swift */; };
 		AA0000420000000000000001 /* LiquidPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000430000000000000001 /* LiquidPicker.swift */; };
 		AA0000510000000000000001 /* IconPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000520000000000000001 /* IconPaths.swift */; };
+		AA0000570000000000000001 /* WindWords.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000580000000000000001 /* WindWords.swift */; };
+		AA0000550000000000000001 /* WordSpecks.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000560000000000000001 /* WordSpecks.swift */; };
+		AA0000530000000000000001 /* Gust.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000540000000000000001 /* Gust.swift */; };
 		AA0000440000000000000001 /* VoiceClips.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000450000000000000001 /* VoiceClips.swift */; };
 		AA0000460000000000000001 /* VoiceLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000470000000000000001 /* VoiceLoader.swift */; };
 		AA00002C0000000000000001 /* BreathSynth.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00002D0000000000000001 /* BreathSynth.swift */; };
@@ -40,6 +43,9 @@
 		AA0000410000000000000001 /* DaySky.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaySky.swift; sourceTree = "<group>"; };
 		AA0000430000000000000001 /* LiquidPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidPicker.swift; sourceTree = "<group>"; };
 		AA0000520000000000000001 /* IconPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconPaths.swift; sourceTree = "<group>"; };
+		AA0000580000000000000001 /* WindWords.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindWords.swift; sourceTree = "<group>"; };
+		AA0000560000000000000001 /* WordSpecks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WordSpecks.swift; sourceTree = "<group>"; };
+		AA0000540000000000000001 /* Gust.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Gust.swift; sourceTree = "<group>"; };
 		AA0000450000000000000001 /* VoiceClips.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceClips.swift; sourceTree = "<group>"; };
 		AA0000470000000000000001 /* VoiceLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceLoader.swift; sourceTree = "<group>"; };
 		AA00002D0000000000000001 /* BreathSynth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BreathSynth.swift; sourceTree = "<group>"; };
@@ -118,6 +124,7 @@
 			isa = PBXGroup;
 			children = (
 				AA0000330000000000000001 /* SceneDrawing.swift */,
+				AA0000580000000000000001 /* WindWords.swift */,
 				AA0000350000000000000001 /* SkyView.swift */,
 				AA0000370000000000000001 /* Controls.swift */,
 				AA0000500000000000000001 /* SettingsFan.swift */,
@@ -145,6 +152,8 @@
 				AA0000410000000000000001 /* DaySky.swift */,
 				AA0000430000000000000001 /* LiquidPicker.swift */,
 				AA0000520000000000000001 /* IconPaths.swift */,
+				AA0000540000000000000001 /* Gust.swift */,
+				AA0000560000000000000001 /* WordSpecks.swift */,
 				AA0000450000000000000001 /* VoiceClips.swift */,
 			);
 			path = Core;
@@ -238,6 +247,8 @@
 				AA0000400000000000000001 /* DaySky.swift in Sources */,
 				AA0000420000000000000001 /* LiquidPicker.swift in Sources */,
 				AA0000510000000000000001 /* IconPaths.swift in Sources */,
+				AA0000530000000000000001 /* Gust.swift in Sources */,
+				AA0000550000000000000001 /* WordSpecks.swift in Sources */,
 				AA00002C0000000000000001 /* BreathSynth.swift in Sources */,
 				AA0000440000000000000001 /* VoiceClips.swift in Sources */,
 				AA0000460000000000000001 /* VoiceLoader.swift in Sources */,
@@ -245,6 +256,7 @@
 				AA0000300000000000000001 /* SessionModel.swift in Sources */,
 				AA00000B0000000000000001 /* HapticManager.swift in Sources */,
 				AA0000320000000000000001 /* SceneDrawing.swift in Sources */,
+				AA0000570000000000000001 /* WindWords.swift in Sources */,
 				AA0000340000000000000001 /* SkyView.swift in Sources */,
 				AA0000360000000000000001 /* Controls.swift in Sources */,
 				AA00004F0000000000000001 /* SettingsFan.swift in Sources */,

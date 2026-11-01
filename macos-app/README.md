@@ -11,6 +11,14 @@ hold for four, with an eight-second settle at the start.
   breath itself.
 - **The orb** in the middle grows and shrinks with the same curve, and a soft ring
   leaves it at each change of phase.
+- **The words** ("Settle in", "Breathe in", "Hold", "Breathe out") are specks of ink on
+  the wind. Each word blows in from the left just before its phase, settles under the box,
+  and is carried off to the right by the gust that brings the next. Each speck strays a
+  little and keeps its own pace, and about a quarter rise into place from the lower left and
+  sink away to the lower right, through the clear sky above the cycle count. The specks keep
+  under the box, and a paused session holds them still. `Core/Gust.swift` is a port of the
+  Android app's `Gust.kt`, so every speck takes the same path on both. With Reduce Motion
+  on, the words cross-fade in place instead; VoiceOver reads them either way.
 - **The sky** follows the time of day: night with stars, blue hour, sunrise, day,
   golden hour, sunset and dusk, timed from that day's sunrise and sunset (worked out
   from the date, so no location is needed; `Core/DaySky.swift`). Text and buttons turn
@@ -31,6 +39,13 @@ hold for four, with an eight-second settle at the start.
   are AAC in `BreatheFree/Voice`, decoded once off the main thread (`Audio/VoiceLoader.swift`,
   `Core/VoiceClips.swift`) and mixed in by the synth on its own clock (see
   `../voice/README.md`).
+- **Focus mode**, the third drop in the settings fan, is off until switched on. A few
+  seconds into a session the top bar (time left, pause, volume and ✕) slides up out of
+  the window and the cycle count slides down, both fading as they go, and the pointer
+  hides with them. Moving the mouse over the window, a click or a key brings them back
+  for three seconds; Space and Escape still pause and end the session while they're out of
+  sight. They stay while the session is paused, while End session or the volume is open,
+  and always with VoiceOver on. With Reduce Motion on they fade in place.
 - The Force Touch trackpad taps at each change if a finger is resting on it.
 
 Keys: **Return** begins, **Space** pauses, and **Escape** pressed twice ends a session (the
@@ -87,7 +102,8 @@ swift test --package-path macos-app
 
 The tests check phase boundaries and countdowns, that every bell starts on the exact
 sample of its phase change, that the sound follows a device clock running fast, that
-the air layer is silent during holds, and that output never clips.
+the air layer is silent during holds, that output never clips, and that the words' specks
+pass under the box (followed through every gust, sampled from the real words on a Mac).
 
 ## Project layout
 
@@ -101,13 +117,16 @@ macos-app/
     ├── ContentView.swift         # sky behind; home, session or finish in front
     ├── Core/
     │   ├── BreathTimeline.swift  # the session laid out in time
-    │   └── BreathSynth.swift     # the generated sound
+    │   ├── BreathSynth.swift     # the generated sound
+    │   ├── Gust.swift            # the words' specks on the wind
+    │   └── WordSpecks.swift      # a word sampled into specks
     ├── Audio/SessionAudio.swift  # AVAudioEngine, aligned to the session clock
     ├── Models/
     │   ├── SessionModel.swift    # saved choices, screens, session start and end
     │   └── HapticManager.swift   # trackpad taps
     └── Views/
         ├── SceneDrawing.swift    # colours, clouds, orb, box
+        ├── WindWords.swift       # the words' specks, drawn
         ├── SkyView.swift
         ├── HomeView.swift
         ├── SessionView.swift

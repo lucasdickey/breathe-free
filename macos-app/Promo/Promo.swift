@@ -156,7 +156,7 @@ struct Promo {
         print("wrote \(frames) frames to \(folder.path)")
 
         // The still: the home screen at that moment, its sky and session length as they are
-        // then, with sound and voice fanned out of the corner, both on as in the frames.
+        // then, with the settings fanned out of the corner, sound and voice on as in the frames.
         if let v = script.fanStill {
             MediaClock.fixed = v
             model.cycles = v >= script.taps.pick ? script.cycles.picked : script.cycles.before

@@ -81,20 +81,34 @@ struct Snapshots {
         shoot("1-home-night", night, HomeView(model: model))
         shoot("1-home-session-length-open", noon, HomeView(model: model, choosing: true))
         shoot("1-home-session-length-open-night", night, HomeView(model: model, choosing: true))
-        // Sound and voice fanned out of the corner: both on, then both off.
+        // Sound, voice and focus mode fanned out of the corner: all on, then all off.
+        let (sound, voice, focus) = (model.soundMode, model.voiceOn, model.focusOn)
+        model.focusOn = true
         shoot("1-home-settings-open", noon, HomeView(model: model, settingsOpen: true))
         shoot("1-home-settings-open-night", night, HomeView(model: model, settingsOpen: true))
-        let (sound, voice) = (model.soundMode, model.voiceOn)
         model.soundMode = .silent
         model.voiceOn = false
+        model.focusOn = false
         shoot("1-home-settings-off", noon, HomeView(model: model, settingsOpen: true))
         shoot("1-home-settings-off-night", night, HomeView(model: model, settingsOpen: true))
         model.soundMode = sound
         model.voiceOn = voice
+        model.focusOn = focus
         for (name, t) in [("2-settle", 3.0), ("3-inhale", 9.9), ("4-hold", 13.6), ("5-exhale", 17.6)] {
             shoot("\(name)-night", night, SessionView(model: model, session: session(at: t)))
         }
         shoot("3-inhale-noon", noon, SessionView(model: model, session: session(at: 9.9)))
+        // The gust from Hold to Breathe out: Hold starting to leave, the two words crossing, and
+        // Breathe out landing just after its phase begins.
+        for (name, t) in [("leaving", 15.4), ("crossing", 15.75), ("landing", 16.3)] {
+            shoot("5-gust-\(name)-noon", noon, SessionView(model: model, session: session(at: t)))
+            shoot("5-gust-\(name)-night", night, SessionView(model: model, session: session(at: t)))
+        }
+        // Focus mode, a few seconds into the inhale: the top bar and the count out of sight.
+        model.focusOn = true
+        shoot("3-inhale-focus-noon", noon, SessionView(model: model, session: session(at: 9.9), controlsShown: false))
+        shoot("3-inhale-focus-night", night, SessionView(model: model, session: session(at: 9.9), controlsShown: false))
+        model.focusOn = focus
         // Paused part way through a hold: the scene dims and the words give way to "Paused".
         let now = CACurrentMediaTime()
         let held = ActiveSession(plan: SessionPlan(cycles: 2), startTime: now - 13.6).paused(at: now)

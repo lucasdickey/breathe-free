@@ -37,6 +37,12 @@ enum FanIcons {
     private static let head = "M5.5 8.5a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0-7 0zM3 20c0-3.4 2.7-5.5 6-5.5s6 2.1 6 5.5"
     static let voiceOn = IconPath.read(head + "M16 6.2a4 4 0 0 1 0 5.6M18.8 3.6a7.6 7.6 0 0 1 0 10.8")
     static let voiceOff = IconPath.read(head + "M16 6.5l4.5 4.5M20.5 6.5L16 11")
+
+    /// A viewfinder's corners round one point; struck through, for everything in view.
+    private static let frame = "M3 8V5.5A2.5 2.5 0 0 1 5.5 3H8M16 3h2.5A2.5 2.5 0 0 1 21 5.5V8"
+        + "M21 16v2.5a2.5 2.5 0 0 1-2.5 2.5H16M8 21H5.5A2.5 2.5 0 0 1 3 18.5V16M9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0z"
+    static let focusOn = IconPath.read(frame)
+    static let focusOff = IconPath.read(frame + "M6.5 17.5l11-11")
 }
 
 /// Reads SVG path data: M, L, H, V, C, S, A and Z, absolute or relative, numbers without

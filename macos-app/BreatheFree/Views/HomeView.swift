@@ -10,7 +10,7 @@ struct HomeView: View {
     @Environment(\.ink) private var ink
     /// Whether session length is fanned out.
     @State private var choosing: Bool
-    /// Whether sound and voice are fanned out.
+    /// Whether the settings are fanned out.
     @State private var settingsOpen: Bool
 
     init(model: SessionModel, choosing: Bool = false, settingsOpen: Bool = false) {
@@ -29,7 +29,7 @@ struct HomeView: View {
             }
             .scrollIndicators(.hidden)
         }
-        // While session length or sound and voice are open the other controls ignore clicks,
+        // While session length or the settings are open the other controls ignore clicks,
         // so a click anywhere but on what is open lands here and folds it, and goes no further.
         // Escape folds either too.
         .contentShape(Rectangle())
@@ -37,12 +37,12 @@ struct HomeView: View {
             choosing = false
             settingsOpen = false
         }
-        // Sound and voice, folded into the button in the top-right corner.
+        // Sound, voice and focus mode, folded into the button in the top-right corner.
         .overlay(alignment: .topTrailing) {
-            SettingsFan(open: $settingsOpen, sound: $model.soundMode, voice: $model.voiceOn)
+            SettingsFan(open: $settingsOpen, sound: $model.soundMode, voice: $model.voiceOn, focus: $model.focusOn)
                 .allowsHitTesting(!choosing)
         }
-        // One open at a time: Command-comma opens sound and voice even while session length is.
+        // One open at a time: Command-comma opens the settings even while session length is.
         .onChange(of: settingsOpen) { open in
             if open { choosing = false }
         }

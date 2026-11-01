@@ -152,6 +152,16 @@ final class LiquidPickerTests: XCTestCase {
         XCTAssertEqual(three[2].y, fanDistance, accuracy: 1e-9)
     }
 
+    func testFourOpenDropsShareTheQuarterCircle() {
+        // As the Android app's four: left of the button, 30 and 60 degrees round, and below it.
+        let four = fan(out: 1, sweep: 1, count: 4).drops
+        for (d, degrees) in zip(four, [0.0, 30, 60, 90]) {
+            let a = degrees * .pi / 180
+            XCTAssertEqual(d.x, -cos(a) * fanDistance, accuracy: 1e-9)
+            XCTAssertEqual(d.y, sin(a) * fanDistance, accuracy: 1e-9)
+        }
+    }
+
     func testFoldedTheDropsWaitInsideTheButton() {
         let folded = fan(out: 0, sweep: 0)
         XCTAssertEqual(folded.home.radius, 20, accuracy: 1e-9)

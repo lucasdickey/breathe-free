@@ -2,15 +2,15 @@
 //  SettingsFan.swift
 //  BreatheFree
 //
-//  Sound and voice, folded into one round button at the top right of the home screen, where a
-//  session's ✕ sits. Clicked, its sliders turn into a ✕ and the settings open out of it as a fan
-//  of drops of the same liquid as the session-length circle (LiquidFan): out of the button as
-//  one drop, then swinging round it, down and to the left, the second pulling free of the
-//  first, each showing its setting's icon. A click on a drop changes that setting and leaves
-//  the fan open, so both can be changed; the ✕, a click anywhere else, Escape or Command-comma
-//  folds it. A drop wears the lit colour while its setting is on. With Reduce Motion on, the
-//  drops fade in and out in place. Kept in step with the browser version's settings-fan.tsx and
-//  the Android app's SettingsFan.kt.
+//  Sound, voice and focus mode, folded into one round button at the top right of the home
+//  screen, where a session's ✕ sits. Clicked, its sliders turn into a ✕ and the settings open
+//  out of it as a fan of drops of the same liquid as the session-length circle (LiquidFan): out
+//  of the button as one drop, then swinging round it, down and to the left, each pulling free of
+//  the one before it, each showing its setting's icon. A click on a drop changes that setting
+//  and leaves the fan open, so more than one can be changed; the ✕, a click anywhere else,
+//  Escape or Command-comma folds it. A drop wears the lit colour while its setting is on. With
+//  Reduce Motion on, the drops fade in and out in place. Kept in step with the browser version's
+//  settings-fan.tsx and the Android app's SettingsFan.kt, which also has vibration.
 //
 
 import SwiftUI
@@ -19,6 +19,7 @@ struct SettingsFan: View {
     @Binding var open: Bool
     @Binding var sound: SoundMode
     @Binding var voice: Bool
+    @Binding var focus: Bool
     @Environment(\.ink) private var ink
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The fan's motion since it last opened or folded, or a setting last changed.
@@ -39,7 +40,7 @@ struct SettingsFan: View {
     private static let top = 14 + button / 2
 
     var body: some View {
-        let lit = [sound != .silent, voice]
+        let lit = [sound != .silent, voice, focus]
         TimelineView(.animation) { _ in
             let now = MediaClock.now()
             let motion = drawnMotion(lit: lit, at: now)
@@ -56,6 +57,8 @@ struct SettingsFan: View {
                     .position(x: Self.far + fan.drops[0].x, y: Self.top + fan.drops[0].y)
                 voiceDrop(fan.drops[1], shown: shown, lit: motion.lit(1, at: now))
                     .position(x: Self.far + fan.drops[1].x, y: Self.top + fan.drops[1].y)
+                focusDrop(fan.drops[2], shown: shown, lit: motion.lit(2, at: now))
+                    .position(x: Self.far + fan.drops[2].x, y: Self.top + fan.drops[2].y)
                 // The button itself, over the drops waiting inside it.
                 mainButton
                     .position(x: Self.far, y: Self.top)
@@ -97,9 +100,9 @@ struct SettingsFan: View {
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .keyboardShortcut(",")
-        .accessibilityLabel("Sound and voice")
+        .accessibilityLabel("Settings")
         .accessibilityValue(open ? "Expanded" : "Collapsed")
-        .help("Sound and voice")
+        .help("Settings")
     }
 
     private func soundDrop(_ drop: FanDrop, shown: Double, lit: Double) -> some View {
@@ -116,6 +119,14 @@ struct SettingsFan: View {
             .accessibilityLabel("Voice guidance")
             .accessibilityValue(voice ? "On" : "Off")
             .help("Voice guidance")
+    }
+
+    /// In a session, the controls keep out of sight until the mouse moves or a key is pressed.
+    private func focusDrop(_ drop: FanDrop, shown: Double, lit: Double) -> some View {
+        dropButton(drop, shown: shown, lit: lit, icon: focus ? FanIcons.focusOn : FanIcons.focusOff) { focus.toggle() }
+            .accessibilityLabel("Focus mode")
+            .accessibilityValue(focus ? "On" : "Off")
+            .help("Focus mode: in a session, the controls keep out of sight until the mouse moves")
     }
 
     /// A setting's drop: a real button over its circle in the liquid, moved with it, its icon as

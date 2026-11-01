@@ -332,8 +332,8 @@ struct FanShape: Equatable {
 /// drops come out of the round button (`button` across) together, as one drop, to `distance`
 /// from its centre, and swing round it from there, down toward below it, each 45 degrees round
 /// from the one before, the fan centred on the quarter circle (two at 22.5 and 67.5 degrees,
-/// three at 0, 45 and 90), the later ones further, pulling free of the ones before them as they
-/// go. A drop's out is 0 at home inside the button and 1 at its distance; its sweep is 0 folded
+/// three at 0, 45 and 90; four or more share the quarter circle, four at 0, 30, 60 and 90), the
+/// later ones further, pulling free of the ones before them as they go. A drop's out is 0 at home inside the button and 1 at its distance; its sweep is 0 folded
 /// flat and 1 in its place. The rates say how fast they change (per second), and `lit` how far
 /// each drop's setting is on. Kept in step with the browser version's fanDrops and the Android
 /// app's LiquidFan.
@@ -350,8 +350,10 @@ enum LiquidFan {
         var drops = (0..<count).map { i -> FanDrop in
             let s = outs[i]
             // How far round from the button's left its place is, toward below: 45 degrees on
-            // from the one before, the fan centred on the quarter circle.
-            let swing = Double.pi / 4 * (1 + Double(i) - Double(count - 1) / 2)
+            // from the one before, the fan centred on the quarter circle, or with more than three
+            // the quarter circle shared between them.
+            let step = count <= 3 ? Double.pi / 4 : (Double.pi / 2) / Double(count - 1)
+            let swing = Double.pi / 4 + step * (Double(i) - Double(count - 1) / 2)
             let angle = Double.pi - swing * sweeps[i]
             let along = distance * s
             // Its velocity: out from the button, and round it.
