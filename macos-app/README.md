@@ -39,6 +39,13 @@ hold for four, with an eight-second settle at the start.
   are AAC in `BreatheFree/Voice`, decoded once off the main thread (`Audio/VoiceLoader.swift`,
   `Core/VoiceClips.swift`) and mixed in by the synth on its own clock (see
   `../voice/README.md`).
+- **Focus mode**, the third drop in the settings fan, is off until switched on. A few
+  seconds into a session the top bar (time left, pause, volume and ✕) slides up out of
+  the window and the cycle count slides down, both fading as they go, and the pointer
+  hides with them. Moving the mouse over the window, a click or a key brings them back
+  for three seconds; Space and Escape still pause and end the session while they're out of
+  sight. They stay while the session is paused, while End session or the volume is open,
+  and always with VoiceOver on. With Reduce Motion on they fade in place.
 - The Force Touch trackpad taps at each change if a finger is resting on it.
 
 Keys: **Return** begins, **Space** pauses, and **Escape** pressed twice ends a session (the

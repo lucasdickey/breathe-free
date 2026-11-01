@@ -46,6 +46,12 @@ final class SessionModel: ObservableObject {
         }
     }
 
+    /// Focus mode: in a session, the controls keep out of sight until the mouse moves or a key
+    /// is pressed. Off until switched on.
+    @Published var focusOn: Bool {
+        didSet { defaults.set(focusOn, forKey: Keys.focus) }
+    }
+
     @Published private(set) var screen: Screen = .home
     @Published private(set) var session: ActiveSession?
 
@@ -69,6 +75,7 @@ final class SessionModel: ObservableObject {
         volume = savedVolume
         voiceVolume = defaults.object(forKey: Keys.voiceVolume) as? Double ?? savedVolume
         voiceOn = defaults.object(forKey: Keys.voice) as? Bool ?? true
+        focusOn = defaults.bool(forKey: Keys.focus)
         if voiceOn { prepareVoice() }
     }
 
@@ -195,5 +202,6 @@ final class SessionModel: ObservableObject {
         static let volume = "volume"
         static let voice = "voice"
         static let voiceVolume = "voiceVolume"
+        static let focus = "focus"
     }
 }

@@ -78,7 +78,8 @@ final class IconPathsTests: XCTestCase {
 
     func testEveryIconReadsToTheEnd() {
         for (pieces, moves) in [(FanIcons.sound(.ambient), 2), (FanIcons.sound(.bells), 2), (FanIcons.sound(.silent), 3),
-                                (FanIcons.voiceOn, 4), (FanIcons.voiceOff, 4)] {
+                                (FanIcons.voiceOn, 4), (FanIcons.voiceOff, 4),
+                                (FanIcons.focusOn, 5), (FanIcons.focusOff, 6)] {
             XCTAssertEqual(pieces.filter { if case .move = $0 { return true } else { return false } }.count, moves)
             // Everything on the grid.
             for p in points(pieces) {

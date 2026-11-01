@@ -233,6 +233,8 @@ struct RoundIconButton: View {
 /// closes again, and a second click too quick to be meant (a double click on the ✕) does nothing.
 struct EndSessionButton: View {
     let end: () -> Void
+    /// Told when it opens into "End session" and when it closes again.
+    var opened: (Bool) -> Void = { _ in }
     @State private var open: Bool
     @State private var ready = false
     @Environment(\.ink) private var ink
@@ -243,9 +245,10 @@ struct EndSessionButton: View {
     /// Opening and closing move the buttons beside it too, so the whole bar eases together.
     private static let opening = Animation.easeOut(duration: 0.2)
 
-    init(open: Bool = false, end: @escaping () -> Void) {
+    init(open: Bool = false, end: @escaping () -> Void, opened: @escaping (Bool) -> Void = { _ in }) {
         _open = State(initialValue: open)
         self.end = end
+        self.opened = opened
     }
 
     var body: some View {
@@ -273,6 +276,7 @@ struct EndSessionButton: View {
         .accessibilityLabel("End session")
         .accessibilityHint(open ? "Press again to end the session." : "Asks before it ends the session.")
         .help(open ? "Click again to end the session" : "End session")
+        .onChange(of: open) { opened($0) }
         .task(id: open) {
             ready = false
             guard open else { return }

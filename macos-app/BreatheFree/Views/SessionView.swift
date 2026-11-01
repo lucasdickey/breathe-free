@@ -6,6 +6,7 @@
 //  clock, so nothing can lag behind or drift from the sound.
 //
 
+import AppKit
 import SwiftUI
 import QuartzCore
 
@@ -13,16 +14,46 @@ struct SessionView: View {
     @ObservedObject var model: SessionModel
     let session: ActiveSession
     /// Starts with End session open, as the screen renderer shows it.
-    var endOpen = false
+    let endOpen: Bool
     @State private var showVolume = false
+    /// Whether End session is open, waiting for its second click.
+    @State private var ending: Bool
     @Environment(\.ink) private var ink
-    // With Reduce Motion on, the words cross in place instead of on the wind.
+    // With Reduce Motion on, the words cross in place instead of on the wind, and focus mode's
+    // controls fade in place instead of sliding.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    // Focus mode: the top bar and the count keep out of sight until the mouse moves, a click or
+    // a key; then they stay a few seconds from the last. They stay while the session is paused
+    // or End session or the volume is open, and for a few seconds after. With VoiceOver on they
+    // always stay, as it can't find what isn't there.
+    /// Each stir of the mouse, click or key press.
+    @State private var stirs = 0
+    @State private var stirredLately: Bool
+    @State private var events: Any?
+    @StateObject private var voiceOver = VoiceOverWatch()
 
     /// A frame drawn now reaches the screen about one refresh later; aim the picture there.
     static let displayLead = 1.0 / 60.0
 
+    /// How long focus mode's controls stay in sight after the last stir.
+    static let focusShown = Duration.seconds(3)
+
+    /// `controlsShown` false starts focus mode's controls out of sight, as the screen renderer shows them.
+    init(model: SessionModel, session: ActiveSession, endOpen: Bool = false, controlsShown: Bool = true) {
+        self.model = model
+        self.session = session
+        self.endOpen = endOpen
+        _ending = State(initialValue: endOpen)
+        _stirredLately = State(initialValue: controlsShown)
+    }
+
+    private var tucked: Bool {
+        model.focusOn && !voiceOver.on && !stirredLately && !session.isPaused && !ending && !showVolume
+    }
+
     var body: some View {
+        let tucked = tucked
         GeometryReader { geo in
             let g = SceneGeometry.of(geo.size)
             let promptY = g.cy + g.half + 58
@@ -109,6 +140,7 @@ struct SessionView: View {
                     }
                     .frame(maxHeight: .infinity, alignment: .bottom)
                     .padding(.bottom, 26)
+                    .modifier(Tucked(away: tucked, up: false, reduceMotion: reduceMotion))
 
                     Text(clockText(Int((frame.remaining - 1e-9).rounded(.up))))
                         .font(.system(size: 15).monospacedDigit())
@@ -116,10 +148,38 @@ struct SessionView: View {
                         .frame(maxHeight: .infinity, alignment: .top)
                         .padding(.top, 22)
                         .accessibilityLabel("\(clockText(Int(frame.remaining.rounded(.up)))) left")
+                        .modifier(Tucked(away: tucked, up: true, reduceMotion: reduceMotion))
                 }
                 .animation(.easeInOut(duration: 0.35), value: paused)
             }
             topBar
+                .modifier(Tucked(away: tucked, up: true, reduceMotion: reduceMotion))
+        }
+        // Moving the mouse over the window, a click or a key brings focus mode's controls back,
+        // and goes on to whatever it was for.
+        .contentShape(Rectangle())
+        .onContinuousHover { phase in
+            if case .active = phase, model.focusOn { stirs += 1 }
+        }
+        .onAppear {
+            events = NSEvent.addLocalMonitorForEvents(
+                matching: [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel]
+            ) { event in
+                if model.focusOn { stirs += 1 }
+                return event
+            }
+        }
+        .onDisappear {
+            if let events { NSEvent.removeMonitor(events) }
+        }
+        .task(id: Stir(count: stirs, paused: session.isPaused, ending: ending, volume: showVolume)) {
+            stirredLately = true
+            try? await Task.sleep(for: Self.focusShown)
+            if !Task.isCancelled { stirredLately = false }
+        }
+        // As a video does, the pointer keeps out of sight with them until the mouse moves.
+        .onChange(of: tucked) { away in
+            if away && NSApp.isActive { NSCursor.setHiddenUntilMouseMoves(true) }
         }
     }
 
@@ -135,7 +195,7 @@ struct SessionView: View {
                 .popover(isPresented: $showVolume, arrowEdge: .bottom) {
                     volumePanel.padding(16)
                 }
-            EndSessionButton(open: endOpen, end: model.endSession)
+            EndSessionButton(open: endOpen, end: model.endSession, opened: { ending = $0 })
         }
         .padding(.top, 14)
         .padding(.horizontal, 16)
@@ -182,5 +242,48 @@ struct SessionView: View {
             Capsule().fill(ink.line.color(0.7)).frame(width: 160 * min(max(done, 0), 1))
         }
         .frame(width: 160, height: 3)
+    }
+}
+
+/// What starts focus mode's few seconds in sight again: a stir, or pausing, ending or the volume
+/// opening or closing.
+private struct Stir: Equatable {
+    let count: Int
+    let paused: Bool
+    let ending: Bool
+    let volume: Bool
+}
+
+/// Focus mode's controls, slid off to the nearest edge (`up`, or down) and faded while `away`, or
+/// with Reduce Motion only faded; out of reach of the pointer and VoiceOver while they're gone.
+private struct Tucked: ViewModifier {
+    let away: Bool
+    let up: Bool
+    let reduceMotion: Bool
+
+    /// Far enough to take the top bar or the count past the window's edge.
+    private static let distance = 64.0
+    /// As Android's: quick to start, slow to settle; out in 600 ms and back in 300.
+    private static func easing(_ seconds: Double) -> Animation { .timingCurve(0.4, 0, 0.2, 1, duration: seconds) }
+
+    func body(content: Content) -> some View {
+        content
+            .offset(y: away && !reduceMotion ? (up ? -1 : 1) * Self.distance : 0)
+            .opacity(away ? 0 : 1)
+            .animation(Self.easing(away ? 0.6 : 0.3), value: away)
+            .allowsHitTesting(!away)
+            .accessibilityHidden(away)
+    }
+}
+
+/// Whether VoiceOver is running, kept up to date.
+private final class VoiceOverWatch: ObservableObject {
+    @Published private(set) var on = NSWorkspace.shared.isVoiceOverEnabled
+    private var watch: NSKeyValueObservation?
+
+    init() {
+        watch = NSWorkspace.shared.observe(\.isVoiceOverEnabled) { [weak self] workspace, _ in
+            DispatchQueue.main.async { self?.on = workspace.isVoiceOverEnabled }
+        }
     }
 }
