@@ -114,6 +114,18 @@ class ScreenshotTest {
     }
 
     @Test
+    fun theSettleHintGoesWithItsWords() {
+        val controller = controller()
+        controller.chooseCycles(2)
+        compose.setContent { BreatheApp(controller) { today(12, 30) } }
+        compose.mainClock.advanceTimeBy(2_500)
+        session(
+            controller, "hint-noon",
+            listOf(3.0 to "1-settling", 7.4 to "2-leaving", 7.7 to "3-going", 8.1 to "4-breathe-in"),
+        )
+    }
+
+    @Test
     fun pausedAtNoon() {
         val controller = controller()
         controller.chooseCycles(2)

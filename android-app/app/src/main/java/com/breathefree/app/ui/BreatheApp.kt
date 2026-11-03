@@ -325,7 +325,9 @@ private fun SessionScreen(
     val words by remember(active) {
         derivedStateOf { plan.promptAt(active.timeAt(frameNanos.value + leadNanos)).let { it.text to it.previous } }
     }
-    val hint by remember(active) { derivedStateOf { if (frame.value.stage == Stage.SETTLE) "Soften your shoulders and jaw" else "" } }
+    // The settle's hint is there while any of it shows; how much shows is read where it is drawn.
+    fun hintAt() = plan.hintAt(active.timeAt(frameNanos.value + leadNanos), onTheWind = !stillWords)
+    val hinted by remember(active) { derivedStateOf { hintAt() > 0 } }
     val count by remember(active) { derivedStateOf { frame.value.countdown } }
     val left by remember(active) { derivedStateOf { ceil(frame.value.remaining - 1e-9).toInt() } }
     val cycle by remember(active) { derivedStateOf { minOf(frame.value.cycle + 1, plan.cycles) } }
@@ -465,10 +467,11 @@ private fun SessionScreen(
                     style = promptStyle,
                 )
             }
-            if (hint.isNotEmpty()) {
+            if (hinted) {
+                // It goes with "Settle in": as the word blows away, or as the words cross.
                 BasicText(
-                    hint,
-                    Modifier.centerAt(g.cx, hintY),
+                    SessionPlan.SETTLE_HINT,
+                    Modifier.centerAt(g.cx, hintY).graphicsLayer { alpha = hintAt().toFloat() },
                     style = TextStyle(color = ink.soft, fontSize = 15.sp),
                 )
             }

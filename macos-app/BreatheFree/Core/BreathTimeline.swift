@@ -106,6 +106,9 @@ struct SessionPlan: Equatable {
     /// How long the closing chord rings after the last hold.
     static let closingSeconds = 8.0
     static let settlePrompt = "Settle in"
+    /// The line under "Settle in", and how long it takes to come and to go on the wind.
+    static let settleHint = "Soften your shoulders and jaw"
+    static let hintFadeSeconds = 0.6
     static let cycleChoices = [2, 6, 10, 20, 36, 50]
     static let defaultCycles = 10
 
@@ -174,6 +177,28 @@ struct SessionPlan: Equatable {
         case .complete:
             return Prompt(text: "", previous: Phase(rawValue: (phaseCount - 1) % 4)!.prompt, since: f.phaseElapsed)
         }
+    }
+
+    /// How much of the settle's hint (`settleHint`) shows at `t`, 0...1. `onTheWind`, it comes in
+    /// as "Settle in" blows in and fades as the word starts to blow away, gone before breathing
+    /// begins; otherwise it crosses in place with the words.
+    func hint(at t: Double, onTheWind: Bool) -> Double {
+        if !onTheWind {
+            let p = prompt(at: t)
+            if p.text == Self.settlePrompt { return p.fade }
+            if p.previous == Self.settlePrompt { return 1 - p.fade }
+            return 0
+        }
+        // In from when the word can be read, a quarter second into its gust...
+        let come = Self.smoothstep((t + Gust.arriveLead - 0.25) / Self.hintFadeSeconds)
+        // ...and out from when it sets off.
+        let go = Self.smoothstep((t - (Self.settleSeconds - Gust.leaveLead)) / Self.hintFadeSeconds)
+        return come * (1 - go)
+    }
+
+    private static func smoothstep(_ v: Double) -> Double {
+        let x = min(max(v, 0), 1)
+        return x * x * (3 - 2 * x)
     }
 
     // 4.0 → 4, 3.5 → 4, 3.0 → 3, ... 0.2 → 1. The epsilon keeps 3.0000000001 from reading 4.

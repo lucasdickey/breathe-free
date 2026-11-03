@@ -124,10 +124,13 @@ struct SessionView: View {
                                 .accessibilityAddTraits(.updatesFrequently)
                         }
 
-                        if frame.stage == .settle {
-                            Text("Soften your shoulders and jaw")
+                        // It goes with "Settle in": as the word blows away, or as the words cross.
+                        let hint = session.plan.hint(at: t, onTheWind: !reduceMotion)
+                        if hint > 0 {
+                            Text(SessionPlan.settleHint)
                                 .font(.system(size: 15))
                                 .foregroundColor(ink.soft.color)
+                                .opacity(hint)
                                 .position(x: g.cx, y: g.cy + g.half + 96)
                         }
                     }
