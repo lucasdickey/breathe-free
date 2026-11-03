@@ -259,3 +259,14 @@ struct ActiveSession: Equatable {
         return ActiveSession(plan: plan, startTime: startTime + (host - held))
     }
 }
+
+/// "1 minute 36 seconds", as VoiceOver should say "1:36".
+func spokenClock(_ seconds: Int) -> String {
+    let m = seconds / 60
+    let s = seconds % 60
+    let minutes = m == 1 ? "1 minute" : "\(m) minutes"
+    let secs = s == 1 ? "1 second" : "\(s) seconds"
+    if m == 0 { return secs }
+    if s == 0 { return minutes }
+    return "\(minutes) \(secs)"
+}

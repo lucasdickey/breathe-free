@@ -770,13 +770,16 @@ private fun Modifier.centerAt(x: Float, y: Float): Modifier = layout { measurabl
 
 private fun clock(seconds: Int): String = "%d:%02d".format(seconds / 60, seconds % 60)
 
-private fun spokenClock(seconds: Int): String {
+/** "1 minute 36 seconds", as TalkBack should say "1:36". */
+internal fun spokenClock(seconds: Int): String {
     val m = seconds / 60
     val s = seconds % 60
+    val minutes = if (m == 1) "1 minute" else "$m minutes"
+    val secs = if (s == 1) "1 second" else "$s seconds"
     return when {
-        m == 0 -> "$s seconds"
-        s == 0 -> "$m minutes"
-        else -> "$m minutes $s seconds"
+        m == 0 -> secs
+        s == 0 -> minutes
+        else -> "$minutes $secs"
     }
 }
 

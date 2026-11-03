@@ -147,7 +147,7 @@ struct SessionView: View {
                         .foregroundColor(ink.deep.color)
                         .frame(maxHeight: .infinity, alignment: .top)
                         .padding(.top, 22)
-                        .accessibilityLabel("\(clockText(Int(frame.remaining.rounded(.up)))) left")
+                        .accessibilityLabel("\(spokenClock(Int((frame.remaining - 1e-9).rounded(.up)))) left")
                         .modifier(Tucked(away: tucked, up: true, reduceMotion: reduceMotion))
                 }
                 .animation(.easeInOut(duration: 0.35), value: paused)
