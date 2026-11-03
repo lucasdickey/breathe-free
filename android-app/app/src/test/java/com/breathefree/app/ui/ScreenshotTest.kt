@@ -144,7 +144,7 @@ class ScreenshotTest {
         controller.chooseFocus(true)
         compose.setContent { BreatheApp(controller) { today(20, 44) } }
         compose.mainClock.advanceTimeBy(2_500)
-        session(controller, "focus-night", listOf(1.0 to "1-starting", 9.9 to "2-tucked"))
+        session(controller, "focus-night", listOf(1.0 to "1-starting", 4.5 to "2-saying-how", 9.9 to "2-tucked"))
         compose.onRoot().performTouchInput { click(Offset(width * 0.2f, height * 0.75f)) }
         compose.mainClock.advanceTimeBy(130)
         shot("focus-night-3-coming")

@@ -1,7 +1,9 @@
 package com.breathefree.app.ui
 
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Context
 import android.graphics.Color as AndroidColor
+import android.os.Build
 import android.provider.Settings
 import android.view.View
 import android.view.accessibility.AccessibilityManager
@@ -364,17 +366,32 @@ private fun SessionScreen(
     // Focus mode: the top bar and the count keep out of sight, and the phone's own bars with
     // them, until the screen is touched; then they stay a few seconds from the last touch. They
     // stay while the session is paused or ✕ or the volume is open, and for a few seconds after.
-    // With TalkBack on they always stay, as it can't find what isn't there.
-    val talkBack = rememberTouchExploration()
+    // With TalkBack, Switch Access or Voice Access on they always stay, as none of them can find
+    // what isn't there.
+    val assisted = rememberAssistance()
     var touches by remember { mutableIntStateOf(0) }
     var touchedLately by remember { mutableStateOf(true) }
+    // The first time they go, a word on how to bring them back, where the count was.
+    var focusHint by remember { mutableStateOf(false) }
     LaunchedEffect(touches, paused, endOpen, volumeOpen) {
         touchedLately = true
         delay(FOCUS_SHOWN_MS)
         touchedLately = false
     }
-    val tucked = controller.focusOn && !talkBack && !touchedLately && !paused && !endOpen && !volumeOpen
+    val tucked = controller.focusOn && !assisted && !touchedLately && !paused && !endOpen && !volumeOpen
     val away = animateFloatAsState(if (tucked) 1f else 0f, tween(if (tucked) 600 else 300, easing = FastOutSlowInEasing), label = "focus")
+    LaunchedEffect(tucked) {
+        // It goes when they come back, or after a few seconds.
+        if (!tucked) {
+            focusHint = false
+        } else if (!controller.focusHintSeen) {
+            controller.sawFocusHint()
+            focusHint = true
+            delay(FOCUS_HINT_MS)
+            focusHint = false
+        }
+    }
+    val hintShows by animateFloatAsState(if (focusHint) 1f else 0f, tween(if (focusHint) 600 else 400), label = "focus hint")
     PhoneBars(hidden = tucked)
     // Where the bars are even while they're hidden, so nothing moves as they come and go.
     val bars = WindowInsets.safeDrawing.union(WindowInsets.systemBarsIgnoringVisibility)
@@ -537,6 +554,21 @@ private fun SessionScreen(
             }
         }
 
+        if (focusHint || hintShows > 0f) {
+            // Laid out as the count is, so it sits just where the count was and moves nothing.
+            Column(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .graphicsLayer { alpha = hintShows }
+                    .windowInsetsPadding(bars)
+                    .padding(bottom = 28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                BasicText("Tap to show the controls", style = TextStyle(color = ink.soft, fontSize = 14.sp))
+                Spacer(Modifier.height(13.dp))
+            }
+        }
+
         if (volumeOpen) {
             // Over everything else: a tap anywhere but the slider closes it, without also
             // pressing whatever is underneath.
@@ -572,6 +604,9 @@ private const val VOLUME_OPEN_MS = 3_500L
 /** How long focus mode's controls stay in sight after the last touch. */
 private const val FOCUS_SHOWN_MS = 3_000L
 
+/** How long the first-time word on bringing them back stays, unless the screen is touched first. */
+private const val FOCUS_HINT_MS = 4_000L
+
 /**
  * Focus mode's controls, slid off to the nearest edge ([up], or down) and faded as [away] goes
  * from 0 to 1; once [tucked], out of TalkBack's reach too.
@@ -598,18 +633,42 @@ private fun PhoneBars(hidden: Boolean) {
     }
 }
 
-/** Whether TalkBack (or anything else that explores by touch) is on, kept up to date. */
+/**
+ * Whether something is on that works the screen for someone, kept up to date: TalkBack, which
+ * explores by touch, or Switch Access, Voice Access and the like, which touch for them. Not a
+ * password manager or the like, which only reads the screen.
+ */
 @Composable
-private fun rememberTouchExploration(): Boolean {
-    val manager = LocalContext.current.getSystemService(AccessibilityManager::class.java)
-    var on by remember(manager) { mutableStateOf(manager?.isTouchExplorationEnabled == true) }
+private fun rememberAssistance(): Boolean {
+    val manager = LocalContext.current.getSystemService(AccessibilityManager::class.java) ?: return false
+    var on by remember(manager) { mutableStateOf(assisted(manager)) }
     DisposableEffect(manager) {
-        val listener = AccessibilityManager.TouchExplorationStateChangeListener { on = it }
-        manager?.addTouchExplorationStateChangeListener(listener)
-        onDispose { manager?.removeTouchExplorationStateChangeListener(listener) }
+        val touch = AccessibilityManager.TouchExplorationStateChangeListener { on = assisted(manager) }
+        val state = AccessibilityManager.AccessibilityStateChangeListener { on = assisted(manager) }
+        manager.addTouchExplorationStateChangeListener(touch)
+        manager.addAccessibilityStateChangeListener(state)
+        // From Android 13, also when one service is switched on beside another.
+        val services = if (Build.VERSION.SDK_INT >= 33) {
+            AccessibilityManager.AccessibilityServicesStateChangeListener { on = assisted(it) }
+                .also(manager::addAccessibilityServicesStateChangeListener)
+        } else {
+            null
+        }
+        onDispose {
+            manager.removeTouchExplorationStateChangeListener(touch)
+            manager.removeAccessibilityStateChangeListener(state)
+            if (services != null && Build.VERSION.SDK_INT >= 33) manager.removeAccessibilityServicesStateChangeListener(services)
+        }
     }
     return on
 }
+
+/** Whether touch is explored, or a service that is on can touch the screen for someone. */
+internal fun assisted(manager: AccessibilityManager): Boolean =
+    manager.isTouchExplorationEnabled ||
+        manager.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK).orEmpty().any {
+            it.capabilities and AccessibilityServiceInfo.CAPABILITY_CAN_PERFORM_GESTURES != 0
+        }
 
 /** What the speaker says it is: how loud, and with the voice on, the tone and the voice apart. */
 private fun volumeDescription(tone: Float, voice: Float?): String {
