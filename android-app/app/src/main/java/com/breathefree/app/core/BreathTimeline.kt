@@ -177,6 +177,32 @@ class SessionPlan(val cycles: Int) {
         }
     }
 
+    /**
+     * How much of the settle's hint ([SETTLE_HINT]) shows at [t], 0..1. [onTheWind], it comes in
+     * as "Settle in" blows in and fades as the word starts to blow away, gone before breathing
+     * begins; otherwise it crosses in place with the words.
+     */
+    fun hintAt(t: Double, onTheWind: Boolean): Double {
+        if (!onTheWind) {
+            val p = promptAt(t)
+            return when (SETTLE_PROMPT) {
+                p.text -> p.fade
+                p.previous -> 1 - p.fade
+                else -> 0.0
+            }
+        }
+        // In from when the word can be read, a quarter second into its gust...
+        val come = smoothstep((t + Gust.ARRIVE_LEAD - 0.25) / HINT_FADE_SECONDS)
+        // ...and out from when it sets off.
+        val go = smoothstep((t - (SETTLE_SECONDS - Gust.LEAVE_LEAD)) / HINT_FADE_SECONDS)
+        return come * (1 - go)
+    }
+
+    private fun smoothstep(v: Double): Double {
+        val x = v.coerceIn(0.0, 1.0)
+        return x * x * (3 - 2 * x)
+    }
+
     // 4.0 → 4, 3.5 → 4, 3.0 → 3, ... 0.2 → 1. The epsilon keeps 3.0000000001 from reading 4.
     private fun wholeSecondsLeft(left: Double, full: Double): Int =
         ceil(left - 1e-9).toInt().coerceIn(1, full.toInt())
@@ -190,6 +216,10 @@ class SessionPlan(val cycles: Int) {
         const val CLOSING_SECONDS = 8.0
 
         const val SETTLE_PROMPT = "Settle in"
+
+        /** The line under "Settle in", and how long it takes to come and to go on the wind. */
+        const val SETTLE_HINT = "Soften your shoulders and jaw"
+        const val HINT_FADE_SECONDS = 0.6
 
         val CYCLE_CHOICES = intArrayOf(2, 6, 10, 20, 36, 50)
         const val DEFAULT_CYCLES = 10

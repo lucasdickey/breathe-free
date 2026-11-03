@@ -182,4 +182,49 @@ class BreathTimelineTest {
         assertEquals(0.64 / 0.3, BoxGeometry.rippleSeconds(0.36 * h, h), 1e-9)
         assertEquals(0.0, BoxGeometry.rippleSeconds(h, h), 0.0)
     }
+
+    @Test
+    fun onTheWindTheSettleHintGoesAsItsWordSetsOff() {
+        val plan = SessionPlan(2)
+        val off = SessionPlan.SETTLE_SECONDS - Gust.LEAVE_LEAD
+        // Not yet as the session begins, all there once "Settle in" has landed...
+        assertEquals(0.0, plan.hintAt(-Gust.ARRIVE_LEAD, onTheWind = true), 1e-9)
+        assertEquals(1.0, plan.hintAt(1.0, onTheWind = true), 1e-9)
+        assertEquals(1.0, plan.hintAt(off, onTheWind = true), 1e-9)
+        // ...going as the word sets off, and gone before the first breath.
+        assertTrue(plan.hintAt(off + 0.3, onTheWind = true) in 0.3..0.7)
+        assertEquals(0.0, plan.hintAt(off + SessionPlan.HINT_FADE_SECONDS, onTheWind = true), 1e-9)
+        for (t in listOf(SessionPlan.SETTLE_SECONDS, 12.0, plan.endTime, plan.endTime + 3)) {
+            assertEquals(0.0, plan.hintAt(t, onTheWind = true), 0.0)
+        }
+    }
+
+    @Test
+    fun inPlaceTheSettleHintCrossesWithTheWords() {
+        val plan = SessionPlan(2)
+        val cross = Prompt.FADE_SECONDS
+        // In with "Settle in" as the session begins, and out with it as "Breathe in" comes.
+        assertEquals(0.0, plan.hintAt(0.0, onTheWind = false), 1e-9)
+        assertEquals(0.5, plan.hintAt(cross / 2, onTheWind = false), 1e-9)
+        assertEquals(1.0, plan.hintAt(7.9, onTheWind = false), 1e-9)
+        assertEquals(1.0, plan.hintAt(SessionPlan.SETTLE_SECONDS, onTheWind = false), 1e-9)
+        assertEquals(0.5, plan.hintAt(SessionPlan.SETTLE_SECONDS + cross / 2, onTheWind = false), 1e-9)
+        assertEquals(0.0, plan.hintAt(SessionPlan.SETTLE_SECONDS + cross, onTheWind = false), 1e-9)
+        assertEquals(0.0, plan.hintAt(12.0, onTheWind = false), 1e-9)
+    }
+
+    @Test
+    fun theSettleHintNeverJumps() {
+        val plan = SessionPlan(2)
+        for (onTheWind in listOf(true, false)) {
+            var t = -1.0
+            var last = plan.hintAt(t, onTheWind)
+            while (t < 12) {
+                t += 1.0 / 120
+                val now = plan.hintAt(t, onTheWind)
+                assertTrue("at $t", abs(now - last) < 0.06)
+                last = now
+            }
+        }
+    }
 }

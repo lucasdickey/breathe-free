@@ -108,7 +108,14 @@ struct Snapshots {
         model.focusOn = true
         shoot("3-inhale-focus-noon", noon, SessionView(model: model, session: session(at: 9.9), controlsShown: false))
         shoot("3-inhale-focus-night", night, SessionView(model: model, session: session(at: 9.9), controlsShown: false))
+        // The first time they go, a word on bringing them back where the count was.
+        shoot("3-settle-focus-hint-noon", noon, SessionView(model: model, session: session(at: 4), controlsShown: false, focusHint: true))
+        shoot("3-settle-focus-hint-night", night, SessionView(model: model, session: session(at: 4), controlsShown: false, focusHint: true))
         model.focusOn = focus
+        // The settle's hint going with "Settle in" as the word blows away.
+        for (name, t) in [("leaving", 7.4), ("going", 7.7)] {
+            shoot("2-settle-\(name)-noon", noon, SessionView(model: model, session: session(at: t)))
+        }
         // Paused part way through a hold: the scene dims and the words give way to "Paused".
         let now = CACurrentMediaTime()
         let held = ActiveSession(plan: SessionPlan(cycles: 2), startTime: now - 13.6).paused(at: now)

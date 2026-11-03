@@ -34,8 +34,10 @@ is generated as it plays. See `../macos-app/README.md` for the full description.
   of the same liquid as session length (`ui/LiquidPicker.kt`, `LiquidFan`).
 - Focus mode (off until switched on): during a session the top bar, the cycle count and the
   phone's status and navigation bars slide off to the nearest edge a few seconds in. Any
-  touch brings them back for three seconds. They stay while the session is paused, while
-  ✕ or the volume is open, and always with TalkBack on.
+  touch brings them back for three seconds; the first time they go, "Tap to show the
+  controls" shows where the count was for a few seconds. They stay while the session is
+  paused, while ✕ or the volume is open, and always while TalkBack, Switch Access, Voice
+  Access or any other service that can touch the screen for someone is on.
 - The voice ("Voice guidance", on from the first start): `audio/VoiceLoader.kt` decodes
   the three prompts in `res/raw` (AAC) with Android's own decoder, once, off the main thread;
   `core/VoiceClips.kt` trims each to its first sound and resamples it if the phone doesn't

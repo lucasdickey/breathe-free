@@ -114,6 +114,18 @@ class ScreenshotTest {
     }
 
     @Test
+    fun theSettleHintGoesWithItsWords() {
+        val controller = controller()
+        controller.chooseCycles(2)
+        compose.setContent { BreatheApp(controller) { today(12, 30) } }
+        compose.mainClock.advanceTimeBy(2_500)
+        session(
+            controller, "hint-noon",
+            listOf(3.0 to "1-settling", 7.4 to "2-leaving", 7.7 to "3-going", 8.1 to "4-breathe-in"),
+        )
+    }
+
+    @Test
     fun pausedAtNoon() {
         val controller = controller()
         controller.chooseCycles(2)
@@ -132,7 +144,7 @@ class ScreenshotTest {
         controller.chooseFocus(true)
         compose.setContent { BreatheApp(controller) { today(20, 44) } }
         compose.mainClock.advanceTimeBy(2_500)
-        session(controller, "focus-night", listOf(1.0 to "1-starting", 9.9 to "2-tucked"))
+        session(controller, "focus-night", listOf(1.0 to "1-starting", 4.5 to "2-saying-how", 9.9 to "2-tucked"))
         compose.onRoot().performTouchInput { click(Offset(width * 0.2f, height * 0.75f)) }
         compose.mainClock.advanceTimeBy(130)
         shot("focus-night-3-coming")
