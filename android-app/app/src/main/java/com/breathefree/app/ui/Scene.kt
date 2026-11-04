@@ -2,6 +2,7 @@ package com.breathefree.app.ui
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -10,6 +11,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.lerp
 import com.breathefree.app.core.BoxGeometry
@@ -19,18 +23,26 @@ import com.breathefree.app.core.Phase
 import com.breathefree.app.core.SessionPlan
 import com.breathefree.app.core.Stage
 import kotlin.math.PI
+import kotlin.math.acos
 import kotlin.math.cos
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.round
 import kotlin.math.sin
 
 /** Where the box and orb sit, in pixels. The text layout uses the same numbers. */
 class SceneGeometry(val cx: Float, val cy: Float, val half: Float) {
     val corner = half * 0.2f
-    val orbMin = half * 0.36f
-    val orbMax = half * 0.82f
+    val orbMin = half * ORB_MIN
+    val orbMax = half * ORB_MAX
 
     fun orbRadius(level: Double) = orbMin + (orbMax - orbMin) * level.toFloat()
 
     companion object {
+        /** The orb's radius with the lungs empty and full, in half-sizes of the box. */
+        const val ORB_MIN = 0.36f
+        const val ORB_MAX = 0.82f
+
         fun of(width: Float, height: Float): SceneGeometry {
             val portrait = height >= width
             val half = if (portrait) minOf(width * 0.34f, height * 0.2f) else minOf(width * 0.2f, height * 0.27f)
@@ -93,10 +105,68 @@ private val SHADE = Color(0xFF0B1D3A)
  */
 fun DrawScope.drawOrb(center: Offset, radius: Float, level: Float, colors: OrbColors, sun: Float, alpha: Float = 1f) {
     if (alpha <= 0f || radius <= 0f) return
-    // Glow: light added round the orb in its own colour, falling away smoothly. Added, not
-    // painted over, so the clouds behind keep their contrast at every breath: a glow that
-    // veiled them as the lungs filled let them come back at the end of each cycle, which
-    // looked like the sky starting over. Faint where the sky is already bright.
+    drawGlow(center, radius, level, colors, alpha)
+    drawGlass(center, radius, level, colors, sun, alpha) { drawCircle(it, radius, center) }
+    // A hairline where the glass meets the sky.
+    drawCircle(
+        color = Color.White.copy(alpha = 0.4f * alpha),
+        radius = radius - density * 0.5f,
+        center = center,
+        style = Stroke(width = density),
+    )
+}
+
+/**
+ * A drop hanging from the top of the box, in the orb's glass: from the line at [p]'s anchor
+ * down to its bulb, in the box [g]. [shape] is a path to draw it with, reused frame to frame.
+ */
+fun DrawScope.drawHanging(p: Hanging, g: SceneGeometry, colors: OrbColors, sun: Float, shape: Path) {
+    val h = g.half.toDouble()
+    val ax = g.cx + p.ax * h
+    val ay = g.cy - h
+    val bx = g.cx + p.bx * h
+    val by = g.cy + p.by * h
+    val rb = p.rb * h
+    val wn = p.wn * h
+    // Keep where the neck joins the bulb below the line.
+    val phi = max(p.phi, acos(((by - ay) / rb - 0.06).coerceIn(-1.0, 1.0)))
+    val s = sin(phi)
+    val c = cos(phi)
+    val lx = bx - rb * s
+    val ly = by - rb * c
+    val rx = bx + rb * s
+    // How far the neck's curves pull in toward the middle, short of crossing it.
+    val reach = min(max(0.0, ly - ay) * 0.5, rb * 0.9)
+    val inL = min(lx + reach * c, bx - rb * 0.06)
+    val inR = max(rx - reach * c, bx + rb * 0.06)
+    val shoulder = ay + (ly - ay) * 0.35
+    val degrees = phi * 180 / PI
+    shape.reset()
+    shape.moveTo((ax + wn).toFloat(), ay.toFloat())
+    shape.lineTo((ax - wn).toFloat(), ay.toFloat())
+    shape.cubicTo((ax - wn).toFloat(), shoulder.toFloat(), inL.toFloat(), (ly - reach * s).toFloat(), lx.toFloat(), ly.toFloat())
+    shape.arcTo(
+        Rect(Offset(bx.toFloat(), by.toFloat()), rb.toFloat()),
+        (270 - degrees).toFloat(), -(360 - 2 * degrees).toFloat(), false,
+    )
+    shape.cubicTo(inR.toFloat(), (ly - reach * s).toFloat(), (ax + wn).toFloat(), shoulder.toFloat(), (ax + wn).toFloat(), ay.toFloat())
+    shape.close()
+
+    val bulb = Offset(bx.toFloat(), by.toFloat())
+    drawGlow(bulb, rb.toFloat(), 0f, colors, 0.7f)
+    clipPath(shape) {
+        drawGlass(bulb, rb.toFloat(), 0f, colors, sun, 1f, up = (max(by - ay, rb * 0.3) * 1.02).toFloat()) { drawRect(it) }
+    }
+    drawPath(shape, Color.White.copy(alpha = 0.4f), style = Stroke(width = density))
+}
+
+/**
+ * Glow: light added round the orb in its own colour, falling away smoothly. Added, not painted
+ * over, so the clouds behind keep their contrast at every breath: a glow that veiled them as
+ * the lungs filled let them come back at the end of each cycle, which looked like the sky
+ * starting over. Faint where the sky is already bright.
+ */
+private fun DrawScope.drawGlow(center: Offset, radius: Float, level: Float, colors: OrbColors, alpha: Float) {
     val glowRadius = radius * GLOW_REACH
     val strength = (0.20f + 0.08f * level) * colors.shine * alpha
     if (strength > 0.002f) {
@@ -115,14 +185,29 @@ fun DrawScope.drawOrb(center: Offset, radius: Float, level: Float, colors: OrbCo
             blendMode = BlendMode.Plus,
         )
     }
+}
+
+/**
+ * The glass's layers, for a ball of [radius] round [center]: [fill] paints each across the
+ * whole shape being drawn. A drop hanging from the box passes [up], how far its neck reaches
+ * above the bulb's centre: above the centre the glass is drawn out to reach that far, so bulb
+ * and neck are one liquid.
+ */
+private fun DrawScope.drawGlass(
+    center: Offset,
+    radius: Float,
+    level: Float,
+    colors: OrbColors,
+    sun: Float,
+    alpha: Float,
+    up: Float = 0f,
+    fill: DrawScope.(Brush) -> Unit,
+) {
     // [k] radii from the middle, toward the sun (or away from it, for negative k).
     val toward = Offset(cos(sun), -sin(sun))
     fun along(k: Float) = center + toward * (radius * k)
-    fun layer(at: Offset, reach: Float, vararg stops: Pair<Float, Color>) = drawCircle(
-        brush = Brush.radialGradient(*stops, center = at, radius = radius * reach),
-        radius = radius,
-        center = center,
-    )
+    fun layer(at: Offset, reach: Float, vararg stops: Pair<Float, Color>) =
+        fill(Brush.radialGradient(*stops, center = at, radius = radius * reach))
     fun Color.at(a: Float) = copy(alpha = a * alpha)
     val white = Color.White
     val core = lerp(colors.coreLow, colors.coreHigh, level)
@@ -131,12 +216,21 @@ fun DrawScope.drawOrb(center: Offset, radius: Float, level: Float, colors: OrbCo
     // The glass itself: thin enough by day for the sky to show through, fuller after dark, lit
     // from within as the glow shines, so the count in the middle still reads on a night sky.
     val within = ((colors.shine - OrbColors.Day.shine) / (1f - OrbColors.Day.shine)).coerceIn(0f, 1f)
-    layer(
-        center, 1f,
+    val body = Brush.radialGradient(
         0f to core.at(0.24f + 0.4f * within), 0.5f to core.at(0.34f + 0.34f * within),
         0.8f to lerp(core, edge, 0.55f).at(0.6f + 0.1f * within),
         0.94f to edge.at(0.9f), 1f to lerp(edge, SHADE, 0.4f).at(0.95f),
+        center = center,
+        radius = radius,
     )
+    if (up > 0f) {
+        // Split on a whole pixel, so the two halves meet without a seam.
+        val split = round(center.y)
+        clipRect(top = split) { fill(body) }
+        clipRect(bottom = split) { scale(1f, up / radius, pivot = center) { fill(body) } }
+    } else {
+        fill(body)
+    }
     // The sky's reflection across the lit side.
     layer(along(0.6f), 0.66f, 0f to white.at(0.42f), 0.6f to white.at(0.12f), 1f to white.at(0f))
     // Light gathered inside, opposite the sun.
@@ -165,31 +259,40 @@ fun DrawScope.drawOrb(center: Offset, radius: Float, level: Float, colors: OrbCo
         radius = radius * 0.07f,
         center = far,
     )
-    // A hairline where the glass meets the sky.
-    drawCircle(
-        color = white.at(0.4f),
-        radius = radius - density * 0.5f,
-        center = center,
-        style = Stroke(width = density),
-    )
 }
 
 /**
  * Draws the box, the trail of the current cycle, the travelling dot, the ripples and the orb
  * for one instant of a session, in the colours [ink] has for the sky. [t] is session time in
- * seconds.
+ * seconds. With [drip], the orb drips into place from the top of the box during the settle
+ * ([Drip]); without, as with animations off, it fades in where it sits.
  */
 class SessionPainter {
     private val outline = Path()
     private val trail = Path()
+    private val drop = Path()
     private val point = DoubleArray(2)
 
-    fun draw(scope: DrawScope, g: SceneGeometry, plan: SessionPlan, frame: BreathFrame, t: Double, ink: Ink) = with(scope) {
+    fun draw(scope: DrawScope, g: SceneGeometry, plan: SessionPlan, frame: BreathFrame, t: Double, ink: Ink, drip: Boolean = true) = with(scope) {
         val settling = frame.stage == Stage.SETTLE
         val cx = g.cx.toDouble()
         val cy = g.cy.toDouble()
         val h = g.half.toDouble()
         val r = g.corner.toDouble()
+
+        // The drop gathering under the top of the box and falling, drawn before the outline so
+        // the line runs over where it hangs.
+        val opening = if (drip && settling) Drip.at(t) else null
+        if (opening != null) {
+            opening.hanging?.let { drawHanging(it, g, ink.orb, ink.sun, drop) }
+            opening.bead?.let { drawHanging(it, g, ink.orb, ink.sun, drop) }
+            for (ball in listOfNotNull(opening.drop, opening.satellite)) {
+                val c = Offset(g.cx, (cy + ball.y * h).toFloat())
+                scale(ball.sx.toFloat(), ball.sy.toFloat(), pivot = c) {
+                    drawOrb(c, (ball.r * h).toFloat(), 0f, ink.orb, ink.sun)
+                }
+            }
+        }
 
         // The outline draws itself during the first seconds of the settle.
         val outlineFraction = if (settling) BreathCurve.rise(t / 2.5) else 1.0
@@ -219,8 +322,17 @@ class SessionPainter {
             }
         }
 
-        val orbAlpha = if (settling) (t / 1.2).coerceIn(0.0, 1.0).toFloat() else 1f
-        drawOrb(Offset(g.cx, g.cy), g.orbRadius(frame.level), frame.level.toFloat(), ink.orb, ink.sun, orbAlpha)
+        if (opening == null) {
+            val orbAlpha = if (settling) (t / 1.2).coerceIn(0.0, 1.0).toFloat() else 1f
+            drawOrb(Offset(g.cx, g.cy), g.orbRadius(frame.level), frame.level.toFloat(), ink.orb, ink.sun, orbAlpha)
+        } else if (opening.orb > 0) {
+            // Landed: a ring leaves it, and it swells to its size for the settle, wobbling.
+            ring(g, SceneGeometry.ORB_MIN * 0.8 * h, t - Drip.LANDS, 0.32f, ink.line)
+            val squash = opening.squash.toFloat()
+            scale(1f + squash, 1f - squash, pivot = Offset(g.cx, g.cy)) {
+                drawOrb(Offset(g.cx, g.cy), (opening.orb * h).toFloat(), 0f, ink.orb, ink.sun)
+            }
+        }
 
         // The dot: fades in at the start corner as the settle ends.
         val dotAlpha = when {
@@ -248,10 +360,15 @@ class SessionPainter {
 
     private fun DrawScope.ripple(g: SceneGeometry, phase: Phase, age: Double, color: Color) {
         val start = (if (phase == Phase.INHALE || phase == Phase.HOLD_EMPTY) g.orbMin else g.orbMax).toDouble()
+        val strength = if (phase == Phase.INHALE || phase == Phase.EXHALE) 0.32f else 0.2f
+        ring(g, start, age, strength, color)
+    }
+
+    /** A ring [age] seconds after it left an orb of radius [start], fading as it spreads to the box. */
+    private fun DrawScope.ring(g: SceneGeometry, start: Double, age: Double, strength: Float, color: Color) {
         val h = g.half.toDouble()
         val life = BoxGeometry.rippleSeconds(start, h)
         if (age >= life) return
-        val strength = if (phase == Phase.INHALE || phase == Phase.EXHALE) 0.32f else 0.2f
         val fade = (1 - age / life).toFloat()
         drawCircle(
             color = color.copy(alpha = strength * fade * fade),

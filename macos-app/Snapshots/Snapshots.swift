@@ -94,6 +94,12 @@ struct Snapshots {
         model.soundMode = sound
         model.voiceOn = voice
         model.focusOn = focus
+        // The opening: the drop gathering, necking, falling and landing, and the orb settled with its count.
+        for (name, t) in [("1-gathering", 3.0), ("2-necking", 4.05), ("3-falling", 4.4), ("4-landing", 4.62),
+                          ("5-settled", 6.0)] {
+            shoot("2-drip-\(name)-noon", noon, SessionView(model: model, session: session(at: t)))
+            shoot("2-drip-\(name)-night", night, SessionView(model: model, session: session(at: t)))
+        }
         for (name, t) in [("2-settle", 3.0), ("3-inhale", 9.9), ("4-hold", 13.6), ("5-exhale", 17.6)] {
             shoot("\(name)-night", night, SessionView(model: model, session: session(at: t)))
         }

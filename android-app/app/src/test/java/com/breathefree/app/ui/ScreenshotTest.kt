@@ -165,6 +165,24 @@ class ScreenshotTest {
         shot("paused-night-2-paused")
     }
 
+    /** The opening at [hour]:[minute], from the drop gathering to the orb settled with its count. */
+    private fun drip(hour: Int, minute: Int) {
+        val controller = controller()
+        controller.chooseCycles(2)
+        compose.setContent { BreatheApp(controller) { today(hour, minute) } }
+        compose.mainClock.advanceTimeBy(2_500)
+        session(
+            controller, "drip-%02d%02d".format(hour, minute),
+            listOf(3.0 to "1-gathering", 4.05 to "2-necking", 4.4 to "3-falling", 4.62 to "4-landing", 6.0 to "5-settled"),
+        )
+    }
+
+    @Test
+    fun theOrbDripsIntoPlaceAtNoon() = drip(12, 30)
+
+    @Test
+    fun theOrbDripsIntoPlaceAtNight() = drip(22, 0)
+
     @Test
     fun orbThroughTheDay() {
         val controller = controller()

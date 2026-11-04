@@ -309,8 +309,9 @@ private fun SessionScreen(
     active: ActiveSession,
     frameNanos: State<Long>,
     leadNanos: Long,
-    // With animations off in the system settings, the words cross in place instead of on the wind.
-    stillWords: Boolean,
+    // With animations off in the system settings, the words cross in place instead of on the
+    // wind, and the orb fades in where it sits instead of dripping into place.
+    still: Boolean,
 ) {
     val ink = LocalInk.current
     val painter = remember { SessionPainter() }
@@ -400,13 +401,16 @@ private fun SessionScreen(
 
         Canvas(Modifier.fillMaxSize().graphicsLayer { alpha = sceneAlpha }) {
             val t = active.timeAt(frameNanos.value + leadNanos)
-            painter.draw(this, g, plan, plan.frameAt(t), t, ink)
+            painter.draw(this, g, plan, plan.frameAt(t), t, ink, drip = !still)
         }
 
         if (count > 0) {
             BasicText(
                 count.toString(),
-                Modifier.centerAt(g.cx, g.cy).graphicsLayer { alpha = sceneAlpha },
+                Modifier.centerAt(g.cx, g.cy).graphicsLayer {
+                    // As the orb drips into place, the count waits for the drop to land.
+                    alpha = sceneAlpha * if (still) 1f else Drip.countAlpha(active.timeAt(frameNanos.value + leadNanos))
+                },
                 style = TextStyle(
                     // Dark on the lit orb: white disappears into its bright centre.
                     color = Color(0xFF0B3A55).copy(alpha = if (settling) 0.55f else 0.8f),
@@ -433,7 +437,7 @@ private fun SessionScreen(
                 style = TextStyle(color = ink.soft, fontSize = 15.sp),
             )
         } else {
-            if (!stillWords) {
+            if (!still) {
                 // Specks of ink on the wind: in from the left, off to the right as the next words come.
                 Canvas(Modifier.fillMaxSize()) {
                     val t = active.timeAt(frameNanos.value + leadNanos)
