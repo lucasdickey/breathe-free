@@ -166,6 +166,33 @@ class ScreenshotTest {
     }
 
     @Test
+    fun orbThroughTheDay() {
+        val controller = controller()
+        controller.chooseCycles(36)
+        var now = today(6, 50)
+        compose.setContent { BreatheApp(controller) { now } }
+        compose.mainClock.advanceTimeBy(2_500)
+        // One time of day per cycle: the sky turns as the lungs fill, then the orb is shot
+        // full, part way through the hold, and empty, late in the hold after the breath out.
+        val times = listOf(6 to 50, 7 to 30, 9 to 0, 12 to 30, 17 to 45, 18 to 40, 19 to 15, 22 to 0)
+        controller.chooseSound(SoundMode.SILENT)
+        controller.chooseVoice(false)
+        compose.runOnUiThread { controller.begin() }
+        val start = compose.mainClock.currentTime
+        fun until(t: Double) = compose.mainClock.advanceTimeBy(start + 350 + (t * 1000).toLong() - compose.mainClock.currentTime)
+        for ((i, time) in times.withIndex()) {
+            val (hour, minute) = time
+            val cycle = 16.0 * i
+            until(cycle + 8.5)
+            now = today(hour, minute)
+            until(cycle + 14.6)
+            shot("orb-%02d%02d-full".format(hour, minute))
+            until(cycle + 23.5)
+            shot("orb-%02d%02d-empty".format(hour, minute))
+        }
+    }
+
+    @Test
     fun homeThroughTheDay() {
         val controller = controller()
         var now = today(6, 0)
