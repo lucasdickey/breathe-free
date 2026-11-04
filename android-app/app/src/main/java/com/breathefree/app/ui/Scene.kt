@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.lerp
 import com.breathefree.app.core.BoxGeometry
 import com.breathefree.app.core.BreathCurve
@@ -17,6 +18,7 @@ import com.breathefree.app.core.BreathFrame
 import com.breathefree.app.core.Phase
 import com.breathefree.app.core.SessionPlan
 import com.breathefree.app.core.Stage
+import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -76,12 +78,19 @@ data class OrbColors(
     }
 }
 
-/** How far from the middle the orb's brightest spot sits, as a fraction of its radius. */
-private const val LIGHT_REACH = 0.5f
-
 /** How far the glow reaches, as a multiple of the orb's radius. */
 private const val GLOW_REACH = 1.55f
 
+/** The deep blue the orb's rim darkens toward. */
+private val SHADE = Color(0xFF0B1D3A)
+
+/**
+ * The orb, as a ball of glass: thin in the middle so the sky shows through, thicker toward the
+ * rim, with the sky's reflection and a sharp glint on the side the sun is on ([sun], an angle
+ * round the orb, so the light goes round it through the day) and the light gathered inside on
+ * the far side. Every layer is a plain radial gradient filling the orb's circle, so the Mac and
+ * the web draw the same ball.
+ */
 fun DrawScope.drawOrb(center: Offset, radius: Float, level: Float, colors: OrbColors, sun: Float, alpha: Float = 1f) {
     if (alpha <= 0f || radius <= 0f) return
     // Glow: light added round the orb in its own colour, falling away smoothly. Added, not
@@ -106,27 +115,62 @@ fun DrawScope.drawOrb(center: Offset, radius: Float, level: Float, colors: OrbCo
             blendMode = BlendMode.Plus,
         )
     }
-    // Body: lit from where the sun is ([sun], an angle round the orb), so the light goes round
-    // it through the day.
-    val light = Offset(center.x + radius * LIGHT_REACH * cos(sun), center.y - radius * LIGHT_REACH * sin(sun))
-    val core = lerp(colors.coreLow, colors.coreHigh, level)
-    val edge = lerp(colors.edgeLow, colors.edgeHigh, level)
-    drawCircle(
-        brush = Brush.radialGradient(
-            0f to Color.White.copy(alpha = 0.95f * alpha),
-            0.35f to core.copy(alpha = alpha),
-            1f to edge.copy(alpha = alpha),
-            center = light,
-            radius = radius * 1.45f,
-        ),
+    // [k] radii from the middle, toward the sun (or away from it, for negative k).
+    val toward = Offset(cos(sun), -sin(sun))
+    fun along(k: Float) = center + toward * (radius * k)
+    fun layer(at: Offset, reach: Float, vararg stops: Pair<Float, Color>) = drawCircle(
+        brush = Brush.radialGradient(*stops, center = at, radius = radius * reach),
         radius = radius,
         center = center,
     )
+    fun Color.at(a: Float) = copy(alpha = a * alpha)
+    val white = Color.White
+    val core = lerp(colors.coreLow, colors.coreHigh, level)
+    val edge = lerp(colors.edgeLow, colors.edgeHigh, level)
+
+    // The glass itself: thin enough by day for the sky to show through, fuller after dark, lit
+    // from within as the glow shines, so the count in the middle still reads on a night sky.
+    val within = ((colors.shine - OrbColors.Day.shine) / (1f - OrbColors.Day.shine)).coerceIn(0f, 1f)
+    layer(
+        center, 1f,
+        0f to core.at(0.24f + 0.4f * within), 0.5f to core.at(0.34f + 0.34f * within),
+        0.8f to lerp(core, edge, 0.55f).at(0.6f + 0.1f * within),
+        0.94f to edge.at(0.9f), 1f to lerp(edge, SHADE, 0.4f).at(0.95f),
+    )
+    // The sky's reflection across the lit side.
+    layer(along(0.6f), 0.66f, 0f to white.at(0.42f), 0.6f to white.at(0.12f), 1f to white.at(0f))
+    // Light gathered inside, opposite the sun.
+    val inner = lerp(colors.coreHigh, white, 0.5f)
+    layer(along(-0.5f), 0.62f, 0f to inner.at(0.72f), 0.5f to inner.at(0.29f), 1f to inner.at(0f))
+    // The glint: a sharp oval toward the sun, lying across the light.
+    withTransform({
+        translate(along(0.58f).x, along(0.58f).y)
+        rotate(-sun * 180f / PI.toFloat(), pivot = Offset.Zero)
+        scale(0.1f, 0.17f, pivot = Offset.Zero)
+    }) {
+        drawCircle(
+            brush = Brush.radialGradient(
+                0f to white.at(0.98f), 0.5f to white.at(0.92f), 0.8f to white.at(0.35f), 1f to white.at(0f),
+                center = Offset.Zero,
+                radius = radius,
+            ),
+            radius = radius,
+            center = Offset.Zero,
+        )
+    }
+    // And a small one on the far side, where the glass catches the sky.
+    val far = along(-0.8f)
     drawCircle(
-        color = Color.White.copy(alpha = 0.22f * alpha),
-        radius = radius - density * 0.75f,
+        brush = Brush.radialGradient(0f to white.at(0.6f), 1f to white.at(0f), center = far, radius = radius * 0.07f),
+        radius = radius * 0.07f,
+        center = far,
+    )
+    // A hairline where the glass meets the sky.
+    drawCircle(
+        color = white.at(0.4f),
+        radius = radius - density * 0.5f,
         center = center,
-        style = Stroke(width = density * 1.5f),
+        style = Stroke(width = density),
     )
 }
 

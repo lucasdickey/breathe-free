@@ -329,12 +329,17 @@ enum SceneDrawing {
                      with: .linearGradient(gradient, startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
     }
 
-    /// How far from the middle the brightest spot sits, as a fraction of the radius.
-    private static let lightReach = 0.5
-
     /// How far the glow reaches, as a multiple of the orb's radius.
     private static let glowReach = 1.55
 
+    /// The deep blue the orb's rim darkens toward.
+    private static let shade = RGB(0x0B1D3A)
+
+    /// The orb, as a ball of glass: thin in the middle so the sky shows through, thicker toward
+    /// the rim, with the sky's reflection and a sharp glint on the side the sun is on (`sun`, an
+    /// angle round the orb, so the light goes round it through the day) and the light gathered
+    /// inside on the far side. Every layer is a plain radial gradient filling the orb's circle,
+    /// as on Android and the web.
     static func orb(_ context: inout GraphicsContext, center: CGPoint, radius: Double, level: Double,
                     colors: OrbColors, sun: Double, alpha: Double = 1) {
         guard alpha > 0, radius > 0 else { return }
@@ -360,26 +365,61 @@ enum SceneDrawing {
                 )
             )
         }
-        // Body: lit from where the sun is (`sun`, an angle round the orb), so the light goes
-        // round it through the day.
-        let light = CGPoint(x: center.x + radius * lightReach * cos(sun),
-                            y: center.y - radius * lightReach * sin(sun))
-        let core = colors.coreLow.mix(colors.coreHigh, level)
-        let edge = colors.edgeLow.mix(colors.edgeHigh, level)
-        context.fill(
-            Path(ellipseIn: circle(center, radius)),
+        // `k` radii from the middle, toward the sun (or away from it, for negative k).
+        func along(_ k: Double) -> CGPoint {
+            CGPoint(x: center.x + radius * k * cos(sun), y: center.y - radius * k * sin(sun))
+        }
+        func layer(_ at: CGPoint, _ reach: Double, _ stops: [(Double, RGB, Double)]) {
+            let gradient = Gradient(stops: stops.map { .init(color: $0.1.color($0.2 * alpha), location: $0.0) })
+            context.fill(Path(ellipseIn: circle(center, radius)),
+                         with: .radialGradient(gradient, center: at, startRadius: 0, endRadius: radius * reach))
+        }
+        let white = RGB(0xFFFFFF)
+        let core = colors.coreLow.blend(colors.coreHigh, level)
+        let edge = colors.edgeLow.blend(colors.edgeHigh, level)
+
+        // The glass itself: thin enough by day for the sky to show through, fuller after dark,
+        // lit from within as the glow shines, so the count in the middle still reads on a night sky.
+        let within = min(max((colors.shine - OrbColors.day.shine) / (1 - OrbColors.day.shine), 0), 1)
+        layer(center, 1, [
+            (0, core, 0.24 + 0.4 * within), (0.5, core, 0.34 + 0.34 * within),
+            (0.8, core.blend(edge, 0.55), 0.6 + 0.1 * within), (0.94, edge, 0.9), (1, edge.blend(shade, 0.4), 0.95),
+        ])
+        // The sky's reflection across the lit side.
+        layer(along(0.6), 0.66, [(0, white, 0.42), (0.6, white, 0.12), (1, white, 0)])
+        // Light gathered inside, opposite the sun.
+        let inner = colors.coreHigh.blend(white, 0.5)
+        layer(along(-0.5), 0.62, [(0, inner, 0.72), (0.5, inner, 0.29), (1, inner, 0)])
+        // The glint: a sharp oval toward the sun, lying across the light.
+        var glint = context
+        let spot = along(0.58)
+        glint.translateBy(x: spot.x, y: spot.y)
+        glint.rotate(by: .radians(-sun))
+        glint.scaleBy(x: 0.1, y: 0.17)
+        glint.fill(
+            Path(ellipseIn: circle(.zero, radius)),
             with: .radialGradient(
                 Gradient(stops: [
-                    .init(color: Color.white.opacity(0.95 * alpha), location: 0),
-                    .init(color: core.color(alpha), location: 0.35),
-                    .init(color: edge.color(alpha), location: 1),
+                    .init(color: white.color(0.98 * alpha), location: 0),
+                    .init(color: white.color(0.92 * alpha), location: 0.5),
+                    .init(color: white.color(0.35 * alpha), location: 0.8),
+                    .init(color: white.color(0), location: 1),
                 ]),
-                center: light,
-                startRadius: 0, endRadius: radius * 1.45
+                center: .zero, startRadius: 0, endRadius: radius
             )
         )
-        context.stroke(Path(ellipseIn: circle(center, radius - 0.75)),
-                       with: .color(Color.white.opacity(0.22 * alpha)), lineWidth: 1.5)
+        // And a small one on the far side, where the glass catches the sky.
+        let far = along(-0.8)
+        context.fill(
+            Path(ellipseIn: circle(far, radius * 0.07)),
+            with: .radialGradient(
+                Gradient(colors: [white.color(0.6 * alpha), white.color(0)]),
+                center: far, startRadius: 0, endRadius: radius * 0.07
+            )
+        )
+        // A hairline where the glass meets the sky.
+        context.stroke(Path(ellipseIn: circle(center, radius - 0.5)),
+                       with: .color(white.color(0.4 * alpha)), lineWidth: 1)
     }
 
     /// The box, the trail of the current cycle, the ripples, the orb and the travelling dot
