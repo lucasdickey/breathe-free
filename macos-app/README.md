@@ -10,7 +10,10 @@ hold for four, with an eight-second settle at the start.
   right as you breathe out and returns along the bottom. Its height is always the
   breath itself.
 - **The orb** in the middle grows and shrinks with the same curve, and a soft ring
-  leaves it at each change of phase.
+  leaves it at each change of phase. It arrives as a drop during the settle: it gathers
+  under the top of the box, necks, lets go and falls into the middle, where it lands with a
+  wobble and a ring (`Core/Drip.swift`, a port of the Android app's `Drip.kt`). The count
+  waits for it to land. With Reduce Motion on, the orb fades in where it sits instead.
 - **The words** ("Settle in", "Breathe in", "Hold", "Breathe out") are specks of ink on
   the wind. Each word blows in from the left just before its phase, settles under the box,
   and is carried off to the right by the gust that brings the next. Each speck strays a
@@ -119,6 +122,7 @@ macos-app/
     │   ├── BreathTimeline.swift  # the session laid out in time
     │   ├── BreathSynth.swift     # the generated sound
     │   ├── Gust.swift            # the words' specks on the wind
+    │   ├── Drip.swift            # the orb dripping into place at the start
     │   └── WordSpecks.swift      # a word sampled into specks
     ├── Audio/SessionAudio.swift  # AVAudioEngine, aligned to the session clock
     ├── Models/

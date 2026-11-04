@@ -29,6 +29,10 @@ is generated as it plays. See `../macos-app/README.md` for the full description.
   cycle count.
   Their paths are worked out from session time, so a paused session holds them still. With
   animations turned off in Android's settings they cross-fade in place, as on the Mac.
+- The orb drips into place during the settle (`ui/Drip.kt`): a drop gathers under the top
+  of the box, necks, lets go and falls into the middle, where it lands with a wobble and a
+  ring, and the count fades in. The hanging drop is the orb's own glass, drawn out up its
+  neck. It too follows session time; with animations off the orb fades in where it sits.
 - The settings fan (`ui/SettingsFan.kt`): Sound, Voice guidance, Vibrate and Focus mode
   fold into a round button at the top right of the home screen and open out of it as drops
   of the same liquid as session length (`ui/LiquidPicker.kt`, `LiquidFan`).

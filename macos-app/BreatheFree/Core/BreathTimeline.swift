@@ -218,6 +218,10 @@ enum BoxGeometry {
         return (cx + x, cy - y)
     }
 
+    /// The orb's radius with the lungs empty and full, in half-sizes of the box.
+    static let orbMin = 0.36
+    static let orbMax = 0.82
+
     /// How fast a ring spreads from the orb, in half-sizes of the box per second.
     static let ripplePace = 0.3
 

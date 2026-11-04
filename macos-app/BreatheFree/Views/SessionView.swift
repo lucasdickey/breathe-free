@@ -19,8 +19,9 @@ struct SessionView: View {
     /// Whether End session is open, waiting for its second click.
     @State private var ending: Bool
     @Environment(\.ink) private var ink
-    // With Reduce Motion on, the words cross in place instead of on the wind, and focus mode's
-    // controls fade in place instead of sliding.
+    // With Reduce Motion on, the words cross in place instead of on the wind, the orb fades in
+    // where it sits instead of dripping into place, and focus mode's controls fade in place
+    // instead of sliding.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // Focus mode: the top bar and the count keep out of sight until the mouse moves, a click or
@@ -67,7 +68,7 @@ struct SessionView: View {
                 ZStack {
                     Group {
                         Canvas { context, _ in
-                            SceneDrawing.session(&context, geometry: g, frame: frame, time: t, ink: ink)
+                            SceneDrawing.session(&context, geometry: g, frame: frame, time: t, ink: ink, drip: !reduceMotion)
                         }
                         .accessibilityHidden(true)
 
@@ -76,6 +77,8 @@ struct SessionView: View {
                                 .font(.system(size: 30, weight: .light).monospacedDigit())
                                 // Dark on the lit orb: white disappears into its bright centre.
                                 .foregroundColor(Ink.countdown.color(frame.stage == .settle ? 0.55 : 0.8))
+                                // As the orb drips into place, the count waits for the drop to land.
+                                .opacity(reduceMotion ? 1 : Drip.countAlpha(t))
                                 .position(x: g.cx, y: g.cy)
                                 .accessibilityHidden(true)
                         }

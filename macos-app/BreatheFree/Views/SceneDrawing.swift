@@ -305,8 +305,8 @@ struct SceneGeometry {
     let half: Double
 
     var corner: Double { half * 0.2 }
-    var orbMin: Double { half * 0.36 }
-    var orbMax: Double { half * 0.82 }
+    var orbMin: Double { half * BoxGeometry.orbMin }
+    var orbMax: Double { half * BoxGeometry.orbMax }
 
     func orbRadius(_ level: Double) -> Double { orbMin + (orbMax - orbMin) * level }
 
@@ -343,10 +343,61 @@ enum SceneDrawing {
     static func orb(_ context: inout GraphicsContext, center: CGPoint, radius: Double, level: Double,
                     colors: OrbColors, sun: Double, alpha: Double = 1) {
         guard alpha > 0, radius > 0 else { return }
-        // Glow: light added round the orb in its own colour, falling away smoothly. Added, not
-        // painted over, so the clouds behind keep their contrast at every breath: a glow that
-        // veiled them as the lungs filled let them come back at the end of each cycle, which
-        // looked like the sky starting over. Faint where the sky is already bright.
+        glow(&context, center: center, radius: radius, level: level, colors: colors, alpha: alpha)
+        let ball = Path(ellipseIn: circle(center, radius))
+        glass(&context, center: center, radius: radius, level: level, colors: colors, sun: sun, alpha: alpha) {
+            $0.fill(ball, with: $1)
+        }
+        // A hairline where the glass meets the sky.
+        context.stroke(Path(ellipseIn: circle(center, radius - 0.5)),
+                       with: .color(RGB(0xFFFFFF).color(0.4 * alpha)), lineWidth: 1)
+    }
+
+    /// A drop hanging from the top of the box, in the orb's glass: from the line at `p`'s
+    /// anchor down to its bulb, in the box `g`.
+    static func hanging(_ context: inout GraphicsContext, _ p: Hanging, geometry g: SceneGeometry,
+                        colors: OrbColors, sun: Double) {
+        let h = g.half
+        let ax = g.cx + p.ax * h, ay = g.cy - h
+        let bx = g.cx + p.bx * h, by = g.cy + p.by * h
+        let rb = p.rb * h, wn = p.wn * h
+        // Keep where the neck joins the bulb below the line.
+        let phi = max(p.phi, acos(min(max((by - ay) / rb - 0.06, -1), 1)))
+        let s = sin(phi), c = cos(phi)
+        let lx = bx - rb * s, ly = by - rb * c, rx = bx + rb * s
+        // How far the neck's curves pull in toward the middle, short of crossing it.
+        let reach = min(max(0, ly - ay) * 0.5, rb * 0.9)
+        let inL = min(lx + reach * c, bx - rb * 0.06), inR = max(rx - reach * c, bx + rb * 0.06)
+        let shoulder = ay + (ly - ay) * 0.35
+        let bulb = CGPoint(x: bx, y: by)
+        var shape = Path()
+        shape.move(to: CGPoint(x: ax + wn, y: ay))
+        shape.addLine(to: CGPoint(x: ax - wn, y: ay))
+        shape.addCurve(to: CGPoint(x: lx, y: ly), control1: CGPoint(x: ax - wn, y: shoulder),
+                       control2: CGPoint(x: inL, y: ly - reach * s))
+        // Round the bottom of the bulb, from the upper left to the upper right.
+        shape.addRelativeArc(center: bulb, radius: rb, startAngle: .radians(1.5 * Double.pi - phi),
+                             delta: .radians(2 * phi - 2 * Double.pi))
+        shape.addCurve(to: CGPoint(x: ax + wn, y: ay), control1: CGPoint(x: inR, y: ly - reach * s),
+                       control2: CGPoint(x: ax + wn, y: shoulder))
+        shape.closeSubpath()
+
+        glow(&context, center: bulb, radius: rb, level: 0, colors: colors, alpha: 0.7)
+        var inside = context
+        inside.clip(to: shape)
+        glass(&inside, center: bulb, radius: rb, level: 0, colors: colors, sun: sun, alpha: 1,
+              up: max(by - ay, rb * 0.3) * 1.02) {
+            $0.fill(Path(CGRect(x: -1e5, y: -1e5, width: 2e5, height: 2e5)), with: $1)
+        }
+        context.stroke(shape, with: .color(RGB(0xFFFFFF).color(0.4)), lineWidth: 1)
+    }
+
+    /// Glow: light added round the orb in its own colour, falling away smoothly. Added, not
+    /// painted over, so the clouds behind keep their contrast at every breath: a glow that veiled
+    /// them as the lungs filled let them come back at the end of each cycle, which looked like
+    /// the sky starting over. Faint where the sky is already bright.
+    private static func glow(_ context: inout GraphicsContext, center: CGPoint, radius: Double, level: Double,
+                             colors: OrbColors, alpha: Double) {
         let glowRadius = radius * glowReach
         let strength = (0.20 + 0.08 * level) * colors.shine * alpha
         if strength > 0.002 {
@@ -365,14 +416,24 @@ enum SceneDrawing {
                 )
             )
         }
+    }
+
+    /// The glass's layers, for a ball of `radius` round `center`: `fill` paints each across the
+    /// whole shape being drawn. A drop hanging from the box passes `up`, how far its neck reaches
+    /// above the bulb's centre: above the centre the glass is drawn out to reach that far, so
+    /// bulb and neck are one liquid.
+    private static func glass(_ context: inout GraphicsContext, center: CGPoint, radius: Double, level: Double,
+                              colors: OrbColors, sun: Double, alpha: Double, up: Double = 0,
+                              fill: (inout GraphicsContext, GraphicsContext.Shading) -> Void) {
         // `k` radii from the middle, toward the sun (or away from it, for negative k).
         func along(_ k: Double) -> CGPoint {
             CGPoint(x: center.x + radius * k * cos(sun), y: center.y - radius * k * sin(sun))
         }
+        func gradient(_ stops: [(Double, RGB, Double)]) -> Gradient {
+            Gradient(stops: stops.map { .init(color: $0.1.color($0.2 * alpha), location: $0.0) })
+        }
         func layer(_ at: CGPoint, _ reach: Double, _ stops: [(Double, RGB, Double)]) {
-            let gradient = Gradient(stops: stops.map { .init(color: $0.1.color($0.2 * alpha), location: $0.0) })
-            context.fill(Path(ellipseIn: circle(center, radius)),
-                         with: .radialGradient(gradient, center: at, startRadius: 0, endRadius: radius * reach))
+            fill(&context, .radialGradient(gradient(stops), center: at, startRadius: 0, endRadius: radius * reach))
         }
         let white = RGB(0xFFFFFF)
         let core = colors.coreLow.blend(colors.coreHigh, level)
@@ -381,10 +442,25 @@ enum SceneDrawing {
         // The glass itself: thin enough by day for the sky to show through, fuller after dark,
         // lit from within as the glow shines, so the count in the middle still reads on a night sky.
         let within = min(max((colors.shine - OrbColors.day.shine) / (1 - OrbColors.day.shine), 0), 1)
-        layer(center, 1, [
+        let body = GraphicsContext.Shading.radialGradient(gradient([
             (0, core, 0.24 + 0.4 * within), (0.5, core, 0.34 + 0.34 * within),
             (0.8, core.blend(edge, 0.55), 0.6 + 0.1 * within), (0.94, edge, 0.9), (1, edge.blend(shade, 0.4), 0.95),
-        ])
+        ]), center: center, startRadius: 0, endRadius: radius)
+        if up > 0 {
+            // Split on a whole point, so the two halves meet without a seam.
+            let split = center.y.rounded()
+            var below = context
+            below.clip(to: Path(CGRect(x: -1e5, y: split, width: 2e5, height: 1e5)))
+            fill(&below, body)
+            var above = context
+            above.clip(to: Path(CGRect(x: -1e5, y: split - 1e5, width: 2e5, height: 1e5)))
+            above.translateBy(x: center.x, y: center.y)
+            above.scaleBy(x: 1, y: up / radius)
+            above.translateBy(x: -center.x, y: -center.y)
+            fill(&above, body)
+        } else {
+            fill(&context, body)
+        }
         // The sky's reflection across the lit side.
         layer(along(0.6), 0.66, [(0, white, 0.42), (0.6, white, 0.12), (1, white, 0)])
         // Light gathered inside, opposite the sun.
@@ -417,18 +493,32 @@ enum SceneDrawing {
                 center: far, startRadius: 0, endRadius: radius * 0.07
             )
         )
-        // A hairline where the glass meets the sky.
-        context.stroke(Path(ellipseIn: circle(center, radius - 0.5)),
-                       with: .color(white.color(0.4 * alpha)), lineWidth: 1)
     }
 
     /// The box, the trail of the current cycle, the ripples, the orb and the travelling dot
     /// for one instant of a session, in the colours `ink` has for the sky. `t` is session time
-    /// in seconds.
+    /// in seconds. With `drip`, the orb drips into place from the top of the box during the
+    /// settle (`Drip`); without, as with Reduce Motion on, it fades in where it sits.
     static func session(_ context: inout GraphicsContext, geometry g: SceneGeometry, frame: BreathFrame, time t: Double,
-                        ink: Ink) {
+                        ink: Ink, drip: Bool = true) {
         let settling = frame.stage == .settle
         let line = StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round)
+
+        // The drop gathering under the top of the box and falling, drawn before the outline so
+        // the line runs over where it hangs.
+        let opening = drip && settling ? Drip.at(t) : nil
+        if let opening {
+            for p in [opening.hanging, opening.bead].compactMap({ $0 }) {
+                hanging(&context, p, geometry: g, colors: ink.orb, sun: ink.sun)
+            }
+            for ball in [opening.drop, opening.satellite].compactMap({ $0 }) {
+                let c = CGPoint(x: g.cx + ball.x * g.half, y: g.cy + ball.y * g.half)
+                var drawn = context
+                drawn.translateBy(x: c.x, y: c.y)
+                drawn.scaleBy(x: ball.sx, y: ball.sy)
+                orb(&drawn, center: .zero, radius: ball.r * g.half, level: 0, colors: ink.orb, sun: ink.sun)
+            }
+        }
 
         // The outline draws itself during the first seconds of the settle.
         let outline = settling ? BreathCurve.rise(t / 2.5) : 1
@@ -448,9 +538,20 @@ enum SceneDrawing {
             }
         }
 
-        let orbAlpha = settling ? min(max(t / 1.2, 0), 1) : 1
-        orb(&context, center: CGPoint(x: g.cx, y: g.cy), radius: g.orbRadius(frame.level), level: frame.level,
-            colors: ink.orb, sun: ink.sun, alpha: orbAlpha)
+        if let opening {
+            if opening.orb > 0 {
+                // Landed: a ring leaves it, and it swells to its size for the settle, wobbling.
+                ring(&context, g, start: g.orbMin * 0.8, age: t - Drip.lands, strength: 0.32, color: ink.line)
+                var landed = context
+                landed.translateBy(x: g.cx, y: g.cy)
+                landed.scaleBy(x: 1 + opening.squash, y: 1 - opening.squash)
+                orb(&landed, center: .zero, radius: opening.orb * g.half, level: 0, colors: ink.orb, sun: ink.sun)
+            }
+        } else {
+            let orbAlpha = settling ? min(max(t / 1.2, 0), 1) : 1
+            orb(&context, center: CGPoint(x: g.cx, y: g.cy), radius: g.orbRadius(frame.level), level: frame.level,
+                colors: ink.orb, sun: ink.sun, alpha: orbAlpha)
+        }
 
         // The dot fades in at the start corner as the settle ends.
         let dotAlpha: Double
@@ -472,9 +573,15 @@ enum SceneDrawing {
 
     private static func ripple(_ context: inout GraphicsContext, _ g: SceneGeometry, phase: Phase, age: Double, color: Paint) {
         let start = (phase == .inhale || phase == .holdEmpty) ? g.orbMin : g.orbMax
+        let strength = (phase == .inhale || phase == .exhale) ? 0.32 : 0.2
+        ring(&context, g, start: start, age: age, strength: strength, color: color)
+    }
+
+    /// A ring `age` seconds after it left an orb of radius `start`, fading as it spreads to the box.
+    private static func ring(_ context: inout GraphicsContext, _ g: SceneGeometry, start: Double, age: Double,
+                             strength: Double, color: Paint) {
         let life = BoxGeometry.rippleSeconds(start: start, h: g.half)
         guard age < life else { return }
-        let strength = (phase == .inhale || phase == .exhale) ? 0.32 : 0.2
         let fade = 1 - age / life
         let radius = BoxGeometry.rippleRadius(start: start, age: age, h: g.half)
         context.stroke(Path(ellipseIn: circle(CGPoint(x: g.cx, y: g.cy), radius)),
