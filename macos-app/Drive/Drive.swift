@@ -144,7 +144,7 @@ private final class Driver {
         }
         print("      could not find \(what); the window holds:")
         for o in all(in: w) where !words(o).isEmpty {
-            print("        \(role(o)?.rawValue ?? "?"): \(words(o))")
+            print("        \(self.role(o)?.rawValue ?? "?"): \(words(o))")
         }
         return nil
     }
