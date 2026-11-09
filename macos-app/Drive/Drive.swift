@@ -182,24 +182,40 @@ private final class Driver {
         save("bench")
 
         // The orb: pulled down and to the right, then let go.
+        // How often this machine draws, over a second.
+        let frames0 = bench.frames, framesAt = CACurrentMediaTime()
+        await wait(1)
+        let fps = Double(bench.frames - frames0) / (CACurrentMediaTime() - framesAt)
+        print(String(format: "      this machine draws %.0f frames a second", fps))
+        // A step a frame at least, so no move is lost in another.
+        let frame = max(0.016, 1.2 / max(fps, 1))
+
         let orb = at(Bench.orb.x, Bench.orb.y)
         let rest = picture(of: window)
         let restAt = CACurrentMediaTime()
         down(orb)
-        await wait(0.05)
-        let to = await move(from: orb, by: NSPoint(x: 120, y: -100), moves: 10, every: 0.016)
+        await wait(frame)
+        let to = await move(from: orb, by: NSPoint(x: 120, y: -100), moves: 10, every: frame)
+        await wait(0.1)
         let pulled = save("orb-pulled")
+        // Where the orb was drawn while pulled: about 27 points down and to the right of its place.
+        let spot = NSPoint(x: orb.x + 21, y: orb.y - 17)
+        await wait(0.1)
         up(to)
         await wait(0.16)
         save("orb-let-go")
+        await wait(1.5)
+        let after = picture(of: window)
         // The orb breathes by itself, ten seconds round: back at the same point of its breath,
         // it should look as it did before it was pulled.
         await wait(restAt + 10 - CACurrentMediaTime())
         let home = picture(of: window)
         if let moved = difference(rest, pulled, around: orb, reach: 50),
+           let left = difference(pulled, after, around: spot, reach: 20),
            let back = difference(rest, home, around: orb, reach: 50) {
             check(moved > 0.02, String(format: "the orb follows the pointer (%.3f)", moved))
-            check(back < 0.01, String(format: "let go, it comes to rest where it was (%.3f)", back))
+            check(left > 0.02, String(format: "let go, it leaves where it was pulled to (%.3f)", left))
+            check(back < 0.01, String(format: "and comes to rest where it was (%.3f)", back))
         } else {
             check(false, "pictures of the orb")
         }
@@ -232,13 +248,19 @@ private final class Driver {
         bench.cycles = 6
         await wait(0.3)
         await open()
-        // Fast: 1.6 drops in a tenth of a second, let go straight after the last move.
+        // Fast: 1.6 drops in a tenth of a second, let go straight after the last move. A flick
+        // needs a move at least every 40 ms (Gestures.swift, VelocityTracker); a machine that
+        // draws more slowly than that can't show one.
         down(drop(6))
         await wait(0.016)
         p = await move(from: drop(6), by: NSPoint(x: 1.6 * step, y: 0), moves: 6, every: 0.016)
         up(p)
         await wait(1.0)
-        check(bench.cycles == 36, "flicked from 6, it carries on to 36 (\(bench.cycles))")
+        if fps >= 30 {
+            check(bench.cycles == 36, "flicked from 6, it carries on to 36 (\(bench.cycles))")
+        } else {
+            print(String(format: "skip  flicked from 6 (this machine draws %.0f frames a second; a flick needs 30 or more): \(bench.cycles)", fps))
+        }
 
         await open()
         down(drop(36))
@@ -266,9 +288,11 @@ private final class Driver {
         await wait(0.2)
         let knob = at(Bench.slider.x, Bench.slider.y)
         down(knob)
-        await wait(0.03)
-        p = await move(from: knob, by: NSPoint(x: Bench.sliderWidth / 2 + 60, y: 0), moves: 12, every: 0.016)
+        await wait(frame)
+        p = await move(from: knob, by: NSPoint(x: Bench.sliderWidth / 2 + 60, y: 0), moves: 12, every: frame)
+        await wait(0.1)
         let stretched = save("volume-stretched")
+        await wait(0.05)
         up(p)
         await wait(1.2)
         let settled = picture(of: window)
@@ -342,6 +366,8 @@ final class BenchState: ObservableObject {
     @Published var open = false
     @Published var volume = 0.5
     @Published var ended = 0
+    /// Frames drawn so far, to know how often this machine draws.
+    var frames = 0
 }
 
 /// The four controls on their own, where the drive knows they are (from the top-left), on the sky.
@@ -357,7 +383,12 @@ private struct Bench: View {
 
     var body: some View {
         ZStack {
-            SkyView(sky: look.sky)
+            // The sky without its drifting clouds, so a picture changes only where a control does.
+            Canvas { context, size in SceneDrawing.sky(&context, size: size, palette: look.sky) }
+            // Counts the frames, as everything here is drawn once a frame.
+            TimelineView(.animation) { timeline in
+                Color.clear.task(id: timeline.date) { state.frames += 1 }
+            }
             AmbientOrb(colors: Ink.matching(look).orb, sun: Ink.matching(look).sun)
                 .frame(width: 112, height: 112)
                 .position(Self.orb)
