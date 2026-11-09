@@ -54,6 +54,24 @@ jobs:
           path: screens
           if-no-files-found: ignore
 
+      # The app's screens in a real window, worked with the mouse and keys: the orb pulled, the
+      # session length slid, the volume dragged past its end and the ✕ held (Drive/Drive.swift).
+      - name: Drive the app
+        run: |
+          mkdir -p drive
+          swiftc -parse-as-library -o drive-app \
+            macos-app/BreatheFree/Core/*.swift macos-app/BreatheFree/Audio/*.swift \
+            macos-app/BreatheFree/Models/*.swift macos-app/BreatheFree/Views/*.swift \
+            macos-app/Drive/Drive.swift
+          ./drive-app drive
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: BreatheFree-macOS-drive
+          path: drive
+          if-no-files-found: ignore
+
   android:
     name: Android app
     runs-on: ubuntu-latest
