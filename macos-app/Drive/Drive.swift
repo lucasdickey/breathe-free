@@ -92,10 +92,6 @@ private final class Driver {
                                          timestamp: ProcessInfo.processInfo.systemUptime,
                                          windowNumber: w.windowNumber, context: nil, eventNumber: 0,
                                          clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1) else { return }
-        if ProcessInfo.processInfo.environment["DRIVE_TRACE"] != nil {
-            let kind = type == .leftMouseDown ? "down" : type == .leftMouseUp ? "up" : "drag"
-            print(String(format: "TRACE send %@ t=%.3f at=(%.0f,%.0f)", kind, CACurrentMediaTime(), p.x, p.y))
-        }
         // Into the app's own queue, as the mouse's events arrive, so they are taken in turn by
         // the event loop like any others.
         NSApp.postEvent(e, atStart: false)

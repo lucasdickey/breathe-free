@@ -63,7 +63,7 @@ jobs:
             macos-app/BreatheFree/Core/*.swift macos-app/BreatheFree/Audio/*.swift \
             macos-app/BreatheFree/Models/*.swift macos-app/BreatheFree/Views/*.swift \
             macos-app/Drive/Drive.swift
-          DRIVE_TRACE=1 ./drive-app drive
+          ./drive-app drive
 
       - uses: actions/upload-artifact@v4
         if: always()
