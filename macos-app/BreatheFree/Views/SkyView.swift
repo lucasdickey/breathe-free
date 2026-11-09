@@ -110,7 +110,6 @@ struct AmbientOrb: View {
             .updating($pressing) { _, pressing, _ in pressing = true }
             .onChanged { value in
                 let t = MediaClock.now()
-                print(String(format: "TRACE orb changed t=%.3f at=(%.0f,%.0f) held=\(poke?.isHeld ?? false)", t, value.location.x, value.location.y))
                 if poke?.isHeld != true {
                     // Caught on its way home it carries on from where it is, unless the window
                     // has changed its size or Reduce Motion has been switched since.
@@ -121,10 +120,7 @@ struct AmbientOrb: View {
                 }
                 poke?.move(SIMD2(Double(value.location.x), Double(value.location.y)), at: t)
             }
-            .onEnded { _ in
-                print(String(format: "TRACE orb ended t=%.3f held=\(poke?.isHeld ?? false)", MediaClock.now()))
-                letGo(side: side)
-            }
+            .onEnded { _ in letGo(side: side) }
     }
 
     private func letGo(side: Double) {
