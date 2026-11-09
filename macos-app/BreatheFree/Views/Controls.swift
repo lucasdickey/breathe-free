@@ -163,6 +163,7 @@ struct CyclePicker: View {
             .updating($sliding) { _, sliding, _ in sliding = true }
             .onChanged { value in
                 let t = MediaClock.now()
+                print(String(format: "TRACE bead changed t=%.3f x=%.0f", t, value.location.x))
                 if slide?.isSliding != true {
                     slide = BeadSlide(count: choices.count, step: Double(size + gap), size: Double(size),
                                       pointer: Double(value.startLocation.x) - width / 2)
@@ -515,6 +516,7 @@ struct GiveSlider: View {
         DragGesture(minimumDistance: 0)
             .updating($touching) { _, touching, _ in touching = true }
             .onChanged { v in
+                print(String(format: "TRACE slider changed t=%.3f x=%.0f dragging=\(dragging)", MediaClock.now(), v.location.x))
                 let r = Self.thumb
                 let x = Double(v.location.x)
                 let at = min(max((x - r) / (width - 2 * r), 0), 1)
@@ -531,6 +533,7 @@ struct GiveSlider: View {
                 give.drag(past: min(x - r, 0) + max(x - (width - r), 0), at: MediaClock.now())
             }
             .onEnded { _ in
+                print(String(format: "TRACE slider ended t=%.3f", MediaClock.now()))
                 dragging = false
                 give.release(at: MediaClock.now())
             }
