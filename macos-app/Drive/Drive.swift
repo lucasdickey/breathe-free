@@ -11,8 +11,8 @@
 //    swiftc -parse-as-library -o drive macos-app/BreatheFree/{Core,Audio,Models,Views}/*.swift \
 //      macos-app/Drive/Drive.swift && ./drive <output folder>
 //
-//  The events go to the app itself, so it needs no permissions; but it needs a screen, as
-//  GitHub's macOS runners have.
+//  The events are posted to the app's own event queue, so it needs no permissions; but it needs
+//  a screen, as GitHub's macOS runners have.
 //  Exits with 1 if any check fails, and 2 if it doesn't finish in three minutes.
 //
 
@@ -92,7 +92,9 @@ private final class Driver {
                                          timestamp: ProcessInfo.processInfo.systemUptime,
                                          windowNumber: w.windowNumber, context: nil, eventNumber: 0,
                                          clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1) else { return }
-        NSApp.sendEvent(e)
+        // Into the app's own queue, as the mouse's events arrive, so they are taken in turn by
+        // the event loop like any others.
+        NSApp.postEvent(e, atStart: false)
     }
 
     func down(_ p: NSPoint, in w: NSWindow? = nil) { mouse(.leftMouseDown, p, in: w ?? window) }
