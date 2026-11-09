@@ -54,9 +54,9 @@ final class GesturesTests: XCTestCase {
         for i in 0..<10 { tracker.add(SIMD2(Double(i) * 8, Double(i) * -2), at: Double(i) * 0.016) }
         XCTAssertEqual(tracker.velocity.x, 8 / 0.016, accuracy: 1)
         XCTAssertEqual(tracker.velocity.y, -2 / 0.016, accuracy: 1)
-        // Held still before it was let go, it was going nowhere.
-        tracker.add(SIMD2(72, -18), at: 0.4)
-        XCTAssertEqual(tracker.velocity, .zero)
+        // Let go as it moves, it is going as fast as it was; held still first, it was going nowhere.
+        XCTAssertEqual(tracker.velocity(at: 0.15).x, 8 / 0.016, accuracy: 1)
+        XCTAssertEqual(tracker.velocity(at: 0.4), .zero)
     }
 
     // MARK: The orb

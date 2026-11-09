@@ -112,6 +112,13 @@ struct VelocityTracker {
         return SIMD2(slope(ts, recent.map { $0.p.x }), slope(ts, recent.map { $0.p.y }))
     }
 
+    /// Points a second at `t`, when the pointer is let go: nothing if it hasn't moved for 40 ms by
+    /// then, as when it was held still before it was let go.
+    func velocity(at t: Double) -> SIMD2<Double> {
+        guard let newest = samples.last, t - newest.t <= Self.stopped else { return .zero }
+        return velocity
+    }
+
     /// The rate of change at t = 0 of the least-squares curve through (`ts`, `xs`): a parabola from
     /// three samples on, a line before.
     private func slope(_ ts: [Double], _ xs: [Double]) -> Double {
@@ -247,11 +254,9 @@ struct OrbPoke {
     /// Let go. `radius` is the orb's radius then, for the ring.
     mutating func up(at t: Double, radius: Double) {
         guard let h = held else { return }
-        // Held still before it was let go, it was going nowhere.
-        tracker.add(h, at: t)
         letGoDent = dent(at: t)
         letGo = h
-        letGoSpeed = tracker.velocity
+        letGoSpeed = tracker.velocity(at: t)
         letGoStretch = Self.stretch * norm(h) / reach
         letGoAt = t
         held = nil
@@ -380,9 +385,7 @@ struct BeadSlide {
     @discardableResult
     mutating func up(at t: Double) -> Int {
         let b = held ?? start
-        // Held still before it was let go, it was going nowhere.
-        tracker.add(SIMD2(b, 0), at: t)
-        speed = tracker.velocity.x
+        speed = tracker.velocity(at: t).x
         let aim = min(max(b + speed * Self.projection, slot(0)), slot(count - 1))
         let to = nearest(aim)
         letGo = b
@@ -452,7 +455,7 @@ struct Give {
     mutating func release(at t: Double) {
         guard let h = held else { return }
         letGo = h
-        letGoSpeed = tracker.velocity.x
+        letGoSpeed = tracker.velocity(at: t).x
         letGoAt = t
         held = nil
     }

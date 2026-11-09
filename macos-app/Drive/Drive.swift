@@ -1,21 +1,23 @@
 //
 //  Drive.swift
 //
-//  Opens the app's screens in a real window and works them with the mouse and keys as someone
-//  would, then checks what happened: pulls the orb on the home screen, slides the session length
-//  (slowly, flicked, past the last drop, and folded), drags the volume on past its end, and holds
-//  the ✕ to end a session (held, let go too soon, clicked, and Escape twice). It saves the window
-//  at each step as a PNG. Compiled together with the app's sources, like Snapshots:
+//  Works the app's gestures in a real window with the mouse and keys, as someone would, and checks
+//  what happened: pulls the orb, slides the session length (slowly, flicked, past the last drop,
+//  and folded), drags the volume on past its end, and holds the ✕ (held, let go too soon and
+//  clicked), on a bench that holds the four controls where it knows they are; then, on the app's
+//  own session screen, holds its ✕ and presses Escape twice. It saves the window at each step as a
+//  PNG. Compiled together with the app's sources, like Snapshots:
 //
 //    swiftc -parse-as-library -o drive macos-app/BreatheFree/{Core,Audio,Models,Views}/*.swift \
 //      macos-app/Drive/Drive.swift && ./drive <output folder>
 //
-//  It finds the controls by what VoiceOver reads for them, and sends the events to the app
-//  itself, so it needs no permissions; but it needs a screen, as GitHub's macOS runners have.
+//  The events go to the app itself, so it needs no permissions; but it needs a screen, as
+//  GitHub's macOS runners have.
 //  Exits with 1 if any check fails, and 2 if it doesn't finish in three minutes.
 //
 
 import AppKit
+import QuartzCore
 import SwiftUI
 
 /// The window as the app has it, with the sky held at half past noon on 7 October 2026.
@@ -45,6 +47,8 @@ private struct Root: View {
 private final class Driver {
     let folder: URL
     let model = SessionModel()
+    let bench = BenchState()
+    let look: DayLook
     let window: NSWindow
     private(set) var failed = 0
     private var shots = 0
@@ -60,10 +64,11 @@ private final class Driver {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = zone
         let noon = calendar.date(from: DateComponents(year: 2026, month: 10, day: 7, hour: 12, minute: 30))!
-        window = NSWindow(contentRect: NSRect(x: 60, y: 60, width: 960, height: 760),
-                          styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        look = DaySky.look(at: noon, in: zone)
+        window = NSWindow(contentRect: NSRect(x: 40, y: 40, width: 960, height: 560),
+                          styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = "Breathe Free"
-        window.contentView = NSHostingView(rootView: Root(model: model, look: DaySky.look(at: noon, in: zone)))
+        window.contentView = NSHostingView(rootView: Bench(state: bench, look: look))
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -76,77 +81,8 @@ private final class Driver {
     }
 
     func wait(_ seconds: Double) async {
+        guard seconds > 0 else { return }
         try? await Task.sleep(nanoseconds: UInt64(seconds * 1e9))
-    }
-
-    // MARK: Finding things, as VoiceOver does
-
-    /// An element's attribute, through the typed accessibility protocol where the element has it,
-    /// and the older attribute interface (which VoiceOver goes through) where it doesn't.
-    private func attribute(_ o: AnyObject, _ name: NSAccessibility.Attribute) -> Any? {
-        if let e = o as? NSAccessibilityProtocol {
-            switch name {
-            case .children: return e.accessibilityChildren()
-            case .description: return e.accessibilityLabel()
-            case .title: return e.accessibilityTitle()
-            case .value: return e.accessibilityValue()
-            case .role: return e.accessibilityRole()
-            default: break
-            }
-        }
-        return (o as? NSObject)?.accessibilityAttributeValue(name)
-    }
-
-    private func children(_ o: AnyObject) -> [AnyObject] {
-        ((attribute(o, .children) as? [Any]) ?? []).map { $0 as AnyObject }
-    }
-
-    private func role(_ o: AnyObject) -> NSAccessibility.Role? {
-        if let r = attribute(o, .role) as? NSAccessibility.Role { return r }
-        return (attribute(o, .role) as? String).map { NSAccessibility.Role(rawValue: $0) }
-    }
-
-    /// Where an element is on the screen.
-    private func frame(_ o: AnyObject) -> NSRect? {
-        if let e = o as? NSAccessibilityProtocol { return e.accessibilityFrame() }
-        if let e = o as? NSAccessibilityElementProtocol { return e.accessibilityFrame() }
-        return (attribute(o, NSAccessibility.Attribute(rawValue: "AXFrame")) as? NSValue)?.rectValue
-    }
-
-    private func words(_ o: AnyObject) -> String {
-        [attribute(o, .description), attribute(o, .title), attribute(o, .value)]
-            .compactMap { $0.map { "\($0)" } }
-            .filter { !$0.isEmpty }
-            .joined(separator: " | ")
-    }
-
-    private func all(in w: NSWindow) -> [AnyObject] {
-        guard let root = w.contentView else { return [] }
-        var out: [AnyObject] = []
-        func walk(_ o: AnyObject, _ depth: Int) {
-            out.append(o)
-            guard depth < 60 else { return }
-            for k in children(o) { walk(k, depth + 1) }
-        }
-        walk(root, 0)
-        return out
-    }
-
-    /// Where the first control whose words pass `match` is, in `w`'s own coordinates.
-    func find(_ what: String, in w: NSWindow? = nil, role: NSAccessibility.Role? = nil,
-              _ match: (String) -> Bool) -> NSRect? {
-        let w = w ?? window
-        for o in all(in: w) {
-            if let role, self.role(o) != role { continue }
-            guard match(words(o)) else { continue }
-            guard let rect = frame(o), rect.width > 0 else { continue }
-            return w.convertFromScreen(rect)
-        }
-        print("      could not find \(what); the window holds:")
-        for o in all(in: w) where !words(o).isEmpty {
-            print("        \(self.role(o)?.rawValue ?? "?"): \(words(o))")
-        }
-        return nil
     }
 
     // MARK: The mouse and keys
@@ -236,14 +172,19 @@ private final class Driver {
 
     // MARK: The run
 
+    /// Window coordinates (from the bottom) for a point measured from the top-left, as the views lay out.
+    func at(_ x: Double, _ yFromTop: Double) -> NSPoint {
+        NSPoint(x: x, y: Double(window.contentView?.bounds.height ?? 0) - yFromTop)
+    }
+
     func run() async -> Bool {
         await wait(1.5)
-        save("home")
+        save("bench")
 
-        // The orb, above the title: pulled down and to the right, then let go.
-        guard let title = find("the title", { $0.contains("Breathe Free") }) else { return false }
-        let orb = NSPoint(x: title.midX, y: title.maxY + 12 + 56)
+        // The orb: pulled down and to the right, then let go.
+        let orb = at(Bench.orb.x, Bench.orb.y)
         let rest = picture(of: window)
+        let restAt = CACurrentMediaTime()
         down(orb)
         await wait(0.05)
         let to = await move(from: orb, by: NSPoint(x: 120, y: -100), moves: 10, every: 0.016)
@@ -251,163 +192,185 @@ private final class Driver {
         up(to)
         await wait(0.16)
         save("orb-let-go")
-        await wait(1.5)
+        // The orb breathes by itself, ten seconds round: back at the same point of its breath,
+        // it should look as it did before it was pulled.
+        await wait(restAt + 10 - CACurrentMediaTime())
         let home = picture(of: window)
-        check(model.screen == .home && model.cycles == 6, "pulling the orb presses nothing else")
-        if let moved = difference(rest, pulled, around: orb, reach: 60),
-           let back = difference(pulled, home, around: orb, reach: 60) {
+        if let moved = difference(rest, pulled, around: orb, reach: 50),
+           let back = difference(rest, home, around: orb, reach: 50) {
             check(moved > 0.02, String(format: "the orb follows the pointer (%.3f)", moved))
-            check(back > 0.02, String(format: "let go, it goes home (%.3f)", back))
+            check(back < 0.01, String(format: "let go, it comes to rest where it was (%.3f)", back))
         } else {
-            print("      (could not compare pictures of the orb)")
+            check(false, "pictures of the orb")
         }
+        check(bench.cycles == 6 && !bench.open && bench.ended == 0, "pulling the orb presses nothing else")
 
         // The session length: a click opens it, and a slide picks where it is let go.
         let step = 54.0
-        func open(_ cycles: Int) async -> Bool {
-            guard let drop = find("session length", { $0.hasPrefix("Session length: \(cycles) cycles") }) else { return false }
-            await click(centre(drop))
+        func drop(_ cycles: Int) -> NSPoint {
+            let i = Double(SessionPlan.cycleChoices.firstIndex(of: cycles) ?? 0)
+            let n = Double(SessionPlan.cycleChoices.count)
+            return at(Bench.picker.x + (i - (n - 1) / 2) * step, Bench.picker.y)
+        }
+        let middle = at(Bench.picker.x, Bench.picker.y)
+        func open() async {
+            await click(middle)
             await wait(0.8)
-            return find("the open row", { $0.hasPrefix("10 cycles,") }) != nil
         }
-        func drop(_ cycles: Int) -> NSPoint? {
-            find("the \(cycles) drop", { $0.hasPrefix("\(cycles) cycles,") }).map(centre)
-        }
-        check(await open(6), "a click opens the session length")
-        if let from = drop(6) {
-            down(from)
-            await wait(0.04)
-            let at = await move(from: from, by: NSPoint(x: 2.2 * step, y: 0), moves: 12, every: 0.04)
-            save("slide-over-20")
-            await wait(0.3)
-            up(at)
-            await wait(1.0)
-            check(model.cycles == 20, "slid slowly from 6 by 2.2 drops, it picks 20 (\(model.cycles))")
-            save("slide-picked-20")
-        }
-        model.cycles = 6
+        await open()
+        check(bench.open, "a click opens the session length")
+        down(drop(6))
+        await wait(0.04)
+        var p = await move(from: drop(6), by: NSPoint(x: 2.2 * step, y: 0), moves: 12, every: 0.04)
+        save("slide-over-20")
         await wait(0.3)
-        if await open(6), let from = drop(6) {
-            // Fast: 1.6 drops in a tenth of a second, let go mid-move.
-            down(from)
-            await wait(0.016)
-            let at = await move(from: from, by: NSPoint(x: 1.6 * step, y: 0), moves: 6, every: 0.016)
-            up(at)
-            await wait(1.0)
-            check(model.cycles == 36, "flicked from 6, it carries on to 36 (\(model.cycles))")
-        } else {
-            check(false, "the session length opens again")
-        }
-        if await open(36), let from = drop(36) {
-            down(from)
-            await wait(0.04)
-            let at = await move(from: from, by: NSPoint(x: 4 * step, y: 0), moves: 16, every: 0.04)
-            save("slide-held-back-past-50")
-            await wait(0.3)
-            up(at)
-            await wait(1.0)
-            check(model.cycles == 50, "slid past the last drop, it holds back and picks 50 (\(model.cycles))")
-        } else {
-            check(false, "the session length opens from 36")
-        }
-        if let folded = find("session length", { $0.hasPrefix("Session length: 50 cycles") }) {
-            // Folded, a slide only opens it.
-            let p = centre(folded)
-            down(p)
-            await wait(0.03)
-            let at = await move(from: p, by: NSPoint(x: 30, y: 0), moves: 5, every: 0.016)
-            up(at)
-            await wait(0.8)
-            check(model.cycles == 50 && find("the open row", { $0.hasPrefix("10 cycles,") }) != nil,
-                  "folded, a slide only opens the session length")
-            if let six = drop(6) {
-                await click(six)
-                await wait(0.8)
-                check(model.cycles == 6, "open, a click still picks (\(model.cycles))")
-            }
+        up(p)
+        await wait(1.0)
+        check(bench.cycles == 20 && !bench.open, "slid slowly from 6 by 2.2 drops, it picks 20, and folds (\(bench.cycles))")
+        save("slide-picked-20")
+
+        bench.cycles = 6
+        await wait(0.3)
+        await open()
+        // Fast: 1.6 drops in a tenth of a second, let go straight after the last move.
+        down(drop(6))
+        await wait(0.016)
+        p = await move(from: drop(6), by: NSPoint(x: 1.6 * step, y: 0), moves: 6, every: 0.016)
+        up(p)
+        await wait(1.0)
+        check(bench.cycles == 36, "flicked from 6, it carries on to 36 (\(bench.cycles))")
+
+        await open()
+        down(drop(36))
+        await wait(0.04)
+        p = await move(from: drop(36), by: NSPoint(x: 4 * step, y: 0), moves: 16, every: 0.04)
+        save("slide-held-back-past-50")
+        await wait(0.3)
+        up(p)
+        await wait(1.0)
+        check(bench.cycles == 50, "slid past the last drop, it holds back and picks 50 (\(bench.cycles))")
+
+        // Folded, a short slide that stays on the drop only opens it, as Android's test (10 dp).
+        down(middle)
+        await wait(0.03)
+        p = await move(from: middle, by: NSPoint(x: 10, y: 0), moves: 5, every: 0.016)
+        up(p)
+        await wait(0.8)
+        check(bench.cycles == 50 && bench.open, "folded, a slide only opens it")
+        await click(drop(6))
+        await wait(0.8)
+        check(bench.cycles == 6 && !bench.open, "open, a click still picks (\(bench.cycles))")
+
+        // The volume: dragged on past its end, it gives, and it is full.
+        bench.volume = 0.5
+        await wait(0.2)
+        let knob = at(Bench.slider.x, Bench.slider.y)
+        down(knob)
+        await wait(0.03)
+        p = await move(from: knob, by: NSPoint(x: Bench.sliderWidth / 2 + 60, y: 0), moves: 12, every: 0.016)
+        let stretched = save("volume-stretched")
+        up(p)
+        await wait(1.2)
+        let settled = picture(of: window)
+        check(bench.volume == 1, "dragged on past its end, the volume is full (\(bench.volume))")
+        let end = at(Bench.slider.x + Bench.sliderWidth / 2 - 9, Bench.slider.y)
+        if let gave = difference(stretched, settled, around: end, reach: 14) {
+            check(gave > 0.01, String(format: "and the slider gives, then springs back (%.3f)", gave))
         }
 
-        // A session: the volume gives past its end, and the ✕ ends it when held.
-        model.cycles = 2
-        await wait(0.3)
-        guard let begin = find("Begin", { $0.contains("Begin") }) else { return false }
-        await click(centre(begin))
+        // The ✕: held for a second it ends; let go too soon, or clicked, it doesn't.
+        let x = at(Bench.cross.x, Bench.cross.y)
+        down(x)
+        await wait(0.5)
+        save("cross-half-held")
+        check(bench.ended == 0, "half way through the hold, nothing has ended")
+        await wait(0.65)
+        check(bench.ended == 1, "held for a second, the ✕ ends the session")
+        up(x)
+        await wait(4.5)
+        down(x)
+        await wait(0.8)
+        up(x)
+        await wait(1.0)
+        save("cross-let-go")
+        check(bench.ended == 1, "let go too soon, nothing ends")
+        for _ in 0..<2 {
+            await click(x)
+            await wait(0.4)
+        }
+        check(bench.ended == 1, "clicks only open it")
+        down(x)
+        await wait(1.3)
+        up(x)
+        await wait(0.5)
+        check(bench.ended == 2, "a hold after that ends it")
+
+        // The app's own session screen: the ✕ in its top bar, held, and Escape twice.
+        await wait(4.5)
+        window.contentView = NSHostingView(rootView: Root(model: model, look: look))
+        model.begin()
         await wait(1.5)
-        check(model.screen == .session, "Begin starts a session")
-        if let volume = find("the volume button", role: .button, { $0.contains("Volume") }) {
-            await click(centre(volume))
-            await wait(0.8)
-            if let popover = NSApp.windows.first(where: { $0 !== window && $0.isVisible }),
-               let slider = find("the volume slider", in: popover, role: .slider, { _ in true }) {
-                model.volume = 0.5
-                await wait(0.2)
-                let from = centre(slider)
-                down(from, in: popover)
-                await wait(0.03)
-                let at = await move(from: from, by: NSPoint(x: slider.width / 2 + 60, y: 0), moves: 12,
-                                    every: 0.016, in: popover)
-                save("volume-stretched", popover)
-                up(at, in: popover)
-                await wait(0.6)
-                save("volume-back", popover)
-                check(model.volume == 1, "dragged on past its end, the volume is full (\(model.volume))")
-            } else {
-                check(false, "the volume opens with its slider")
-            }
-            // Away from the popover, to close it.
-            await click(NSPoint(x: 80, y: 80))
-            await wait(0.6)
-        }
-
-        func cross() -> NSPoint? { find("the ✕", { $0.hasPrefix("End session") }).map(centre) }
-        if let x = cross() {
-            down(x)
-            await wait(0.5)
-            save("cross-half-held")
-            check(model.screen == .session, "half way through the hold, the session carries on")
-            await wait(0.65)
-            check(model.screen == .home, "held for a second, the ✕ ends the session")
-            up(x)
-            await wait(0.8)
-        }
-        if let begin = find("Begin", { $0.contains("Begin") }) {
-            await click(centre(begin))
-            await wait(1.5)
-        }
-        if model.screen == .session, let x = cross() {
-            down(x)
-            await wait(0.8)
-            up(x)
-            await wait(1.0)
-            save("cross-let-go")
-            check(model.screen == .session, "let go too soon, the session carries on")
-            for _ in 0..<2 {
-                if let x = cross() { await click(x) }
-                await wait(0.4)
-            }
-            check(model.screen == .session, "clicks only open it")
-            if let x = cross() {
-                down(x)
-                await wait(1.3)
-                up(x)
-            }
-            await wait(0.5)
-            check(model.screen == .home, "a hold after that ends it")
-        } else {
-            check(false, "a second session starts")
-        }
-        if let begin = find("Begin", { $0.contains("Begin") }) {
-            await click(centre(begin))
-            await wait(1.5)
-            escape()
-            await wait(0.5)
-            check(model.screen == .session, "Escape once only opens End session")
-            escape()
-            await wait(0.5)
-            check(model.screen == .home, "Escape twice ends the session")
-        }
+        save("session")
+        let w = Double(window.contentView?.bounds.width ?? 0)
+        // The top bar: 16 in from the right and 14 down, buttons 40 across, 10 apart.
+        let cross = at(w - 16 - 20, 14 + 20)
+        down(cross)
+        await wait(0.5)
+        save("session-cross-half-held")
+        check(model.screen == .session, "in a session, half way through the hold it carries on")
+        await wait(0.65)
+        check(model.screen == .home, "held for a second, the session's ✕ ends it")
+        up(cross)
+        await wait(0.8)
+        model.begin()
+        await wait(1.5)
+        escape()
+        await wait(0.5)
+        check(model.screen == .session, "Escape once only opens End session")
+        escape()
+        await wait(0.5)
+        check(model.screen == .home, "Escape twice ends the session")
         save("home-again")
         return failed == 0
+    }
+}
+
+/// What the bench's controls have done.
+@MainActor
+final class BenchState: ObservableObject {
+    @Published var cycles = 6
+    @Published var open = false
+    @Published var volume = 0.5
+    @Published var ended = 0
+}
+
+/// The four controls on their own, where the drive knows they are (from the top-left), on the sky.
+private struct Bench: View {
+    @ObservedObject var state: BenchState
+    let look: DayLook
+
+    static let orb = CGPoint(x: 160, y: 160)
+    static let picker = CGPoint(x: 500, y: 160)
+    static let cross = CGPoint(x: 840, y: 160)
+    static let slider = CGPoint(x: 500, y: 340)
+    static let sliderWidth = 180.0
+
+    var body: some View {
+        ZStack {
+            SkyView(sky: look.sky)
+            AmbientOrb(colors: Ink.matching(look).orb, sun: Ink.matching(look).sun)
+                .frame(width: 112, height: 112)
+                .position(Self.orb)
+            CyclePicker(choices: SessionPlan.cycleChoices, selection: $state.cycles, open: $state.open,
+                        describe: { "\($0) cycles" })
+                .position(Self.picker)
+            EndSessionButton(end: { state.ended += 1 })
+                .position(Self.cross)
+            GiveSlider(value: $state.volume, label: "Volume")
+                .frame(width: Self.sliderWidth)
+                .position(Self.slider)
+        }
+        .environment(\.ink, Ink.matching(look))
     }
 }
 
