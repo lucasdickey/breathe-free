@@ -13,8 +13,8 @@ android {
         applicationId = "dev.oneoff.breathefree"
         minSdk = 26
         targetSdk = 36
-        versionCode = 13
-        versionName = "2.7"
+        versionCode = 14
+        versionName = "2.8"
     }
 
     // Release builds are signed with the key described in keystore.properties when that file

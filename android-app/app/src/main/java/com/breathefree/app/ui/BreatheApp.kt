@@ -11,8 +11,10 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -51,14 +53,15 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,6 +74,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -101,10 +105,12 @@ import com.breathefree.app.core.Stage
 import com.breathefree.app.core.gustAt
 import java.time.ZonedDateTime
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * The whole app. [clock] gives the wall-clock time the sky follows; tests pass a fixed one.
@@ -184,9 +190,9 @@ fun BreatheApp(controller: BreatheController, clock: () -> ZonedDateTime = { Zon
             }
             Crossfade(targetState = screen, animationSpec = tween(700), label = "screen") { s ->
                 when (s) {
-                    Screen.HOME -> HomeScreen(controller, frameNanos)
+                    Screen.HOME -> HomeScreen(controller, frameNanos, stillClouds)
                     Screen.SESSION -> controller.session?.let { SessionScreen(controller, it, frameNanos, leadNanos, stillClouds) }
-                    Screen.DONE -> DoneScreen(controller, frameNanos)
+                    Screen.DONE -> DoneScreen(controller, frameNanos, stillClouds)
                 }
             }
         }
@@ -196,7 +202,7 @@ fun BreatheApp(controller: BreatheController, clock: () -> ZonedDateTime = { Zon
 // ---------------------------------------------------------------- Home
 
 @Composable
-private fun HomeScreen(controller: BreatheController, frameNanos: State<Long>) {
+private fun HomeScreen(controller: BreatheController, frameNanos: State<Long>, still: Boolean) {
     val ink = LocalInk.current
     val choices = remember { SessionPlan.CYCLE_CHOICES.toList() }
     var choosing by rememberSaveable { mutableStateOf(false) }
@@ -234,11 +240,14 @@ private fun HomeScreen(controller: BreatheController, frameNanos: State<Long>) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Canvas(Modifier.size(132.dp)) {
-                val t = frameNanos.value / 1e9
-                val level = (0.5 - 0.5 * cos(2 * PI * t / 10.0)).toFloat()
-                drawOrb(center, size.minDimension * (0.2f + 0.1f * level), level, ink.orb, ink.sun)
-            }
+            // It can be poked (PokableOrb).
+            PokableOrb(
+                frameNanos,
+                still,
+                radius = { t -> 0.2f + 0.1f * homeLevel(t) },
+                level = ::homeLevel,
+                modifier = Modifier.size(132.dp),
+            )
             Spacer(Modifier.height(8.dp))
             BasicText(
                 "Breathe Free",
@@ -257,6 +266,7 @@ private fun HomeScreen(controller: BreatheController, frameNanos: State<Long>) {
                 },
                 describe = { "$it cycles, ${spokenDuration(it)}" },
                 onBounds = { places.picker = it },
+                tick = controller::tick,
             )
             Spacer(Modifier.height(8.dp))
             BasicText(
@@ -332,14 +342,18 @@ private fun SessionScreen(
     val cycle by remember(active) { derivedStateOf { minOf(frame.value.cycle + 1, plan.cycles) } }
     val settling by remember(active) { derivedStateOf { frame.value.stage == Stage.SETTLE } }
 
-    // Ending takes two taps, so a stray one can't end a session: the ✕ opens into "End session",
-    // and a tap on that ends it. Left alone it closes again, and a second tap too quick to be
-    // meant (a double tap on the ✕) does nothing. Back works the same way.
+    // A stray touch can't end a session. The ✕ ends it when held for a second, opening into
+    // "Hold to end" as it is pressed (EndSessionButton). Back, and TalkBack, which can't hold,
+    // take two taps instead: the first opens it into "End session", and a second ends it. Left
+    // alone it closes again, and a second tap too quick to be meant (a double tap) does nothing.
+    val talkBack = rememberTouchExploration()
     var endOpen by remember { mutableStateOf(false) }
+    var endHeld by remember { mutableStateOf(false) }
+    var endLabel by remember { mutableStateOf("End session") }
     var endReady by remember { mutableStateOf(false) }
-    LaunchedEffect(endOpen) {
+    LaunchedEffect(endOpen, endHeld) {
         endReady = false
-        if (endOpen) {
+        if (endOpen && !endHeld) {
             delay(END_READY_MS)
             endReady = true
             delay(END_OPEN_MS - END_READY_MS)
@@ -348,9 +362,17 @@ private fun SessionScreen(
     }
     val askToEnd: () -> Unit = {
         if (!endOpen) {
+            endLabel = "End session"
             endOpen = true
         } else if (endReady) {
             controller.endSession()
+        }
+    }
+    val holding: (Boolean) -> Unit = {
+        endHeld = it
+        if (it) {
+            endLabel = "Hold to end"
+            endOpen = true
         }
     }
     BackHandler(enabled = controller.screen == Screen.SESSION, onBack = askToEnd)
@@ -364,7 +386,6 @@ private fun SessionScreen(
     // them, until the screen is touched; then they stay a few seconds from the last touch. They
     // stay while the session is paused or ✕ or the volume is open, and for a few seconds after.
     // With TalkBack on they always stay, as it can't find what isn't there.
-    val talkBack = rememberTouchExploration()
     var touches by remember { mutableIntStateOf(0) }
     var touchedLately by remember { mutableStateOf(true) }
     LaunchedEffect(touches, paused, endOpen, volumeOpen) {
@@ -487,7 +508,17 @@ private fun SessionScreen(
                 .padding(horizontal = 16.dp, vertical = 10.dp),
         ) {
             Box(Modifier.align(Alignment.CenterStart)) {
-                EndSessionButton(endOpen, askToEnd)
+                EndSessionButton(
+                    open = endOpen,
+                    label = endLabel,
+                    hold = !talkBack,
+                    onTap = askToEnd,
+                    onHolding = holding,
+                    onHeld = {
+                        controller.tick()
+                        controller.endSession()
+                    },
+                )
             }
             BasicText(
                 clock(left),
@@ -553,6 +584,7 @@ private fun SessionScreen(
                 voice = if (controller.voiceOn) controller.voiceVolume else null,
                 onVoiceChange = controller::chooseVoiceVolume,
                 onLeftAlone = { volumeOpen = false },
+                tick = controller::tick,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .windowInsetsPadding(bars)
@@ -563,7 +595,7 @@ private fun SessionScreen(
     }
 }
 
-/** How long "End session" stays open for its second tap, and how soon it starts to listen. */
+/** How long "End session" stays open for its second tap or a hold, and how soon a tap counts. */
 private const val END_OPEN_MS = 4_000L
 private const val END_READY_MS = 300L
 
@@ -631,6 +663,7 @@ private fun VolumePanel(
     onVoiceChange: (Float) -> Unit,
     onLeftAlone: () -> Unit,
     modifier: Modifier = Modifier,
+    tick: () -> Unit = {},
 ) {
     val ink = LocalInk.current
     var touches by remember { mutableIntStateOf(0) }
@@ -654,6 +687,7 @@ private fun VolumePanel(
                     onChange(it)
                 },
                 modifier = Modifier.padding(horizontal = 8.dp).width(180.dp),
+                tick = tick,
             )
             Canvas(Modifier.size(18.dp)) { Icons.volume(this, ink.soft, 1f) }
         }
@@ -674,6 +708,7 @@ private fun VolumePanel(
                         },
                         modifier = Modifier.width(180.dp),
                         description = "$name volume",
+                        tick = tick,
                     )
                 }
             }
@@ -681,23 +716,69 @@ private fun VolumePanel(
     }
 }
 
-/** A slider from 0 to 1: drag along it or tap where you want it; TalkBack can set it too. */
+/**
+ * A slider from 0 to 1: drag along it or tap where you want it; TalkBack can set it too. Dragged
+ * on past an end, it gives: the bar stretches the way it is pulled, less the further it goes,
+ * and springs back when let go. It [tick]s as it reaches an end.
+ */
 @Composable
-private fun VolumeSlider(value: Float, onChange: (Float) -> Unit, modifier: Modifier = Modifier, description: String = "Volume") {
+private fun VolumeSlider(
+    value: Float,
+    onChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    description: String = "Volume",
+    tick: () -> Unit = {},
+) {
     val ink = LocalInk.current
     val change by rememberUpdatedState(onChange)
+    val tickNow by rememberUpdatedState(tick)
+    val scope = rememberCoroutineScope()
     val thumb = 9.dp
+    // How far past an end it is stretched: by the finger, or springing back once let go.
+    val stretch = remember { Animatable(0f, visibilityThreshold = 0.1f) }
+    var held by remember { mutableStateOf<Float?>(null) }
     Box(
         modifier
-            .height(40.dp)
+            .height(48.dp)
             .pointerInput(Unit) {
                 val r = thumb.toPx()
                 detectTapGestures { change(((it.x - r) / (size.width - 2 * r)).coerceIn(0f, 1f)) }
             }
             .pointerInput(Unit) {
                 val r = thumb.toPx()
+                val limit = SLIDER_GIVE.toPx()
                 fun at(x: Float) = ((x - r) / (size.width - 2 * r)).coerceIn(0f, 1f)
-                detectHorizontalDragGestures(onDragStart = { change(at(it.x)) }) { c, _ -> change(at(c.position.x)) }
+                fun past(x: Float) = (x - r).coerceAtMost(0f) + (x - (size.width - r)).coerceAtLeast(0f)
+                val tracker = VelocityTracker()
+                var end = false
+                fun letGo() {
+                    val let = held ?: return
+                    val speed = tracker.calculateVelocity().x
+                    scope.launch {
+                        stretch.snapTo(let)
+                        held = null
+                        stretch.animateTo(0f, SLIDER_BACK, speed)
+                    }
+                }
+                detectHorizontalDragGestures(
+                    onDragStart = {
+                        tracker.resetTracking()
+                        end = at(it.x) == 0f || at(it.x) == 1f
+                        change(at(it.x))
+                        scope.launch { stretch.stop() }
+                    },
+                    onDragEnd = ::letGo,
+                    onDragCancel = ::letGo,
+                ) { c, _ ->
+                    val x = c.position.x
+                    change(at(x))
+                    val atEnd = at(x) == 0f || at(x) == 1f
+                    if (atEnd && !end) tickNow()
+                    end = atEnd
+                    val s = rubberBand(past(x), limit)
+                    held = s
+                    tracker.addPosition(c.uptimeMillis, Offset(s, 0f))
+                }
             }
             .semantics {
                 contentDescription = description
@@ -708,19 +789,27 @@ private fun VolumeSlider(value: Float, onChange: (Float) -> Unit, modifier: Modi
         Canvas(Modifier.matchParentSize()) {
             val r = thumb.toPx()
             val y = size.height / 2
-            val x = r + (size.width - 2 * r) * value
-            val track = 4.dp.toPx()
-            drawLine(ink.line.copy(alpha = 0.25f), Offset(r, y), Offset(size.width - r, y), track, StrokeCap.Round)
-            drawLine(ink.deep.copy(alpha = 0.85f), Offset(r, y), Offset(x, y), track, StrokeCap.Round)
+            val s = held ?: stretch.value
+            val start = r + s.coerceAtMost(0f)
+            val end = size.width - r + s.coerceAtLeast(0f)
+            val x = start + (end - start) * value
+            // A little thinner as it stretches.
+            val track = 4.dp.toPx() * (1 - 0.3f * abs(s) / SLIDER_GIVE.toPx())
+            drawLine(ink.line.copy(alpha = 0.25f), Offset(start, y), Offset(end, y), track, StrokeCap.Round)
+            drawLine(ink.deep.copy(alpha = 0.85f), Offset(start, y), Offset(x, y), track, StrokeCap.Round)
             drawCircle(ink.deep, r, Offset(x, y))
         }
     }
 }
 
+/** The furthest the volume slider stretches past an end, and how it springs back. */
+private val SLIDER_GIVE = 8.dp
+private val SLIDER_BACK = spring(dampingRatio = 0.5f, stiffness = 500f, visibilityThreshold = 0.1f)
+
 // ---------------------------------------------------------------- Done
 
 @Composable
-private fun DoneScreen(controller: BreatheController, frameNanos: State<Long>) {
+private fun DoneScreen(controller: BreatheController, frameNanos: State<Long>, still: Boolean) {
     val ink = LocalInk.current
     val cycles = controller.session?.plan?.cycles ?: controller.cycles
     BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
@@ -733,11 +822,13 @@ private fun DoneScreen(controller: BreatheController, frameNanos: State<Long>) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Canvas(Modifier.size(150.dp)) {
-                val t = frameNanos.value / 1e9
-                val level = (0.35 + 0.25 * (0.5 - 0.5 * cos(2 * PI * t / 12.0))).toFloat()
-                drawOrb(center, size.minDimension * (0.2f + 0.12f * level), level, ink.orb, ink.sun)
-            }
+            PokableOrb(
+                frameNanos,
+                still,
+                radius = { t -> 0.2f + 0.12f * doneLevel(t) },
+                level = ::doneLevel,
+                modifier = Modifier.size(150.dp),
+            )
             Spacer(Modifier.height(12.dp))
             BasicText(
                 "Well done",
@@ -763,6 +854,12 @@ private fun DoneScreen(controller: BreatheController, frameNanos: State<Long>) {
 }
 
 // ---------------------------------------------------------------- helpers
+
+/** How full the home screen's orb is at time [t]: a slow breath, ten seconds round. */
+private fun homeLevel(t: Double): Float = (0.5 - 0.5 * cos(2 * PI * t / 10.0)).toFloat()
+
+/** How full the done screen's orb is: a slower, shallower breath. */
+private fun doneLevel(t: Double): Float = (0.35 + 0.25 * (0.5 - 0.5 * cos(2 * PI * t / 12.0))).toFloat()
 
 /** Places the content with its centre at (x, y) pixels inside a full-size box. */
 private fun Modifier.centerAt(x: Float, y: Float): Modifier = layout { measurable, constraints ->

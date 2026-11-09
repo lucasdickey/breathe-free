@@ -2,12 +2,19 @@ package com.breathefree.app.ui
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.horizontalDrag
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
@@ -29,7 +36,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,11 +59,15 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -65,6 +81,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
 import kotlin.math.abs
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -219,6 +236,12 @@ fun OutlineButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
  * counts bud out of it as liquid and pull free to its left and right, nearest first; tapping
  * one picks it, and they all flow back into it (LiquidPicker.kt). The caller folds the row too
  * on a touch anywhere else, for which [onBounds] reports where the row is, and on Back.
+ *
+ * Open, it can be slid too: pressed and slid sideways, the chosen colour comes away under the
+ * finger as a bead of the same liquid, running into each drop it passes, with a [tick] at each.
+ * Let go, it carries on to the drop it was heading for, and that one is picked. Past the last
+ * drop it holds back. Folded, it only opens: the row opens round its middle, not round the drop
+ * that was pressed, so a slide from there would land somewhere the finger never chose.
  */
 @Composable
 fun CyclePicker(
@@ -230,9 +253,21 @@ fun CyclePicker(
     describe: (Int) -> String,
     onBounds: (LayoutCoordinates) -> Unit,
     modifier: Modifier = Modifier,
+    tick: () -> Unit = {},
 ) {
     val ink = LocalInk.current
     val chosen = choices.indexOf(selected).coerceAtLeast(0)
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val openNow by rememberUpdatedState(open)
+    val pick by rememberUpdatedState(onPick)
+    val tickNow by rememberUpdatedState(tick)
+    // The bead: where it is along the row from its middle, held under the finger or on its way
+    // to a drop once let go, and how fast it is going; out while either.
+    val bead = remember { Animatable(0f, visibilityThreshold = 0.5f) }
+    var beadHeld by remember { mutableStateOf<Float?>(null) }
+    var beadSpeed by remember { mutableFloatStateOf(0f) }
+    var beadOut by remember { mutableStateOf(false) }
     // How far each drop has come out of the chosen one: 0 at home inside it, 1 in its place.
     val spread = remember(choices) { choices.map { Animatable(if (open) 1f else 0f) } }
     // How much of the chosen colour each drop wears.
@@ -269,12 +304,91 @@ fun CyclePicker(
             size.toPx(),
             step.toPx(),
         )
+        fun beadAt(): Float? = if (beadOut) beadHeld ?: bead.value else null
+        // How much of the bead lies over the drop at [x].
+        fun Density.under(x: Float): Float {
+            val b = beadAt() ?: return 0f
+            return LiquidMotion.smoothstep(0f, 1f, 1 - abs(b - x) / size.toPx())
+        }
         Box(
             Modifier
                 .width(size * choices.size + gap * (choices.size - 1))
                 .height(size)
                 .onGloballyPositioned(onBounds)
-                .drawBehind { drawLiquid(drops(), chosen, ink, settled = (spread + accent).none { it.isRunning }) },
+                .pointerInput(choices) {
+                    val r = size.toPx() / 2
+                    val stepPx = step.toPx()
+                    fun slot(i: Int) = stepPx * (i - (choices.size - 1) / 2f)
+                    fun nearest(x: Float) = ((x / stepPx) + (choices.size - 1) / 2f).roundToInt().coerceIn(0, choices.size - 1)
+                    val first = slot(0)
+                    val last = slot(choices.size - 1)
+                    fun held(x: Float) = when {
+                        x < first -> first + rubberBand(x - first, r)
+                        x > last -> last + rubberBand(x - last, r)
+                        else -> x
+                    }
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        if (!openNow) return@awaitEachGesture
+                        val x0 = down.position.x - this.size.width / 2f
+                        val start = slot(nearest(x0)) * spread[nearest(x0)].value
+                        // Slid far enough to mean it, it stops being a tap on the drop underneath.
+                        val slid = awaitHorizontalTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
+                            ?: return@awaitEachGesture
+                        scope.launch { bead.stop() }
+                        val tracker = VelocityTracker()
+                        var over = nearest(start)
+                        fun follow(x: Float, at: Long) {
+                            val b = held(start + x - down.position.x)
+                            beadHeld = b
+                            beadOut = true
+                            tracker.addPosition(at, Offset(b, 0f))
+                            beadSpeed = tracker.calculateVelocity().x
+                            if (nearest(b) != over) {
+                                over = nearest(b)
+                                tickNow()
+                            }
+                        }
+                        follow(slid.position.x, slid.uptimeMillis)
+                        horizontalDrag(down.id) { change ->
+                            follow(change.position.x, change.uptimeMillis)
+                            change.consume()
+                        }
+                        // Held still before it was let go, it was going nowhere.
+                        currentEvent.changes.firstOrNull { it.id == down.id }?.let {
+                            tracker.addPosition(it.uptimeMillis, Offset(beadHeld ?: start, 0f))
+                        }
+                        // Let go, it carries on the way it was going, to the drop it would come
+                        // to rest at, and becomes the chosen drop there.
+                        val let = beadHeld ?: start
+                        val speed = tracker.calculateVelocity().x
+                        val target = nearest((let + speed * PROJECTION_S).coerceIn(first, last))
+                        scope.launch {
+                            bead.snapTo(let)
+                            beadHeld = null
+                            bead.animateTo(slot(target), BEAD_HOME, speed)
+                            for (i in choices.indices) accent[i].snapTo(if (i == target) 1f else 0f)
+                            beadOut = false
+                            beadSpeed = 0f
+                            if (target != over) tickNow()
+                            pick(choices[target])
+                        }
+                    }
+                }
+                .drawBehind {
+                    val b = beadAt()
+                    val speed = if (beadHeld != null) beadSpeed else bead.velocity
+                    drawLiquid(
+                        drops(),
+                        chosen,
+                        ink,
+                        settled = b == null && (spread + accent).none { it.isRunning },
+                        bead = b?.let {
+                            val stretch = 1f + 0.14f * min(1f, abs(speed) / step.toPx() / 13f)
+                            PickerDrop(it, size.toPx() / 2, stretch, BEAD_REACH * size.toPx(), 1f, 0f)
+                        },
+                    )
+                },
             contentAlignment = Alignment.Center,
         ) {
             for (i in choices.indices) {
@@ -301,15 +415,22 @@ fun CyclePicker(
                             .then(touch),
                         contentAlignment = Alignment.Center,
                     ) {
+                        // Half under the bead, a count fades out, and comes back light on it or dark off it.
+                        fun under() = if (beadOut) with(density) { under(slot.toPx() * spread[i].value) } else null
                         BasicText(
                             choices[i].toString(),
-                            modifier = Modifier.graphicsLayer { alpha = drops()[i].label },
+                            modifier = Modifier.graphicsLayer {
+                                alpha = drops()[i].label * (under()?.let { abs(2 * it - 1) } ?: 1f)
+                            },
                             style = TextStyle(
                                 fontSize = 17.sp,
                                 fontWeight = if (current) FontWeight.SemiBold else FontWeight.Normal,
                                 textAlign = TextAlign.Center,
                             ),
-                            color = { lerp(ink.deep, ink.onAccent, accent[i].value) },
+                            color = {
+                                val on = under()?.let { if (it < 0.5f) 0f else 1f } ?: accent[i].value
+                                lerp(ink.deep, ink.onAccent, on)
+                            },
                         )
                     }
                 }
@@ -318,11 +439,21 @@ fun CyclePicker(
     }
 }
 
+/** Let go, how far ahead of the bead the drop it carries on to is looked for: as far as it would go in this long. */
+private const val PROJECTION_S = 0.1f
+
+/** The bead on its way to a drop: quickly, with the least bounce, as it was thrown. */
+private val BEAD_HOME = spring(dampingRatio = 0.8f, stiffness = 600f, visibilityThreshold = 0.5f)
+
+/** How far the bead runs into the drops it passes, as a share of a drop's size. */
+private const val BEAD_REACH = 0.4f
+
 /**
  * The drops: all of them as one shape of liquid in the unchosen colours, run together wherever
- * they meet, with a rim inside its edge like a border, and the chosen one solid on top.
+ * they meet, with a rim inside its edge like a border, and the chosen one solid on top. While
+ * the chosen colour is out as a [bead], it is part of the liquid too, solid on top in its place.
  */
-private fun DrawScope.drawLiquid(drops: List<PickerDrop>, chosen: Int, ink: Ink, settled: Boolean) {
+private fun DrawScope.drawLiquid(drops: List<PickerDrop>, chosen: Int, ink: Ink, settled: Boolean, bead: PickerDrop? = null) {
     val rim = 1.dp.toPx()
     translate(center.x, center.y) {
         if (settled) {
@@ -334,7 +465,7 @@ private fun DrawScope.drawLiquid(drops: List<PickerDrop>, chosen: Int, ink: Ink,
             }
         } else {
             val outline = Path().apply { fillType = PathFillType.EvenOdd }
-            val row = LiquidMotion.order(drops.size, chosen).map { drops[it].liquid }
+            val row = LiquidMotion.order(drops.size, chosen).map { drops[it].liquid } + listOfNotNull(bead?.liquid)
             for (loop in LiquidOutline.loops(row, inset = rim / 2, cell = 2.dp.toPx())) {
                 outline.moveTo(loop[0], loop[1])
                 for (n in 2 until loop.size step 2) outline.lineTo(loop[n], loop[n + 1])
@@ -343,7 +474,7 @@ private fun DrawScope.drawLiquid(drops: List<PickerDrop>, chosen: Int, ink: Ink,
             drawPath(outline, ink.field)
             drawPath(outline, ink.fieldBorder, style = Stroke(rim))
         }
-        for (d in drops) {
+        for (d in if (bead != null) listOf(bead) else drops) {
             if (d.accent <= 0f || d.radius <= 0.05f) continue
             drawOval(
                 ink.accent.copy(alpha = ink.accent.alpha * d.accent),
@@ -379,22 +510,74 @@ fun RoundIconButton(
 }
 
 /**
- * The ✕ that ends a session, in two steps so a stray tap can't: tapped, it opens into "End
- * session", and a tap on that ends it. [open] says which it shows; [onClick] decides what a
- * tap does.
+ * The ✕ that ends a session. With [hold], it ends it when held for [HOLD_MS]: pressed, it opens
+ * (the caller hears [onHolding]) and fills from the left at an even pace, as time passing does;
+ * let go too soon, the fill drains away quickly, and once full, [onHeld] ends the session. A tap
+ * only opens it. Without [hold], for TalkBack, a tap does [onTap], and the caller opens it on the
+ * first and ends the session on the second; accessibility services that act rather than touch
+ * do the same with a hold. [open] says whether it shows [label].
  */
 @Composable
-fun EndSessionButton(open: Boolean, onClick: () -> Unit) {
+fun EndSessionButton(
+    open: Boolean,
+    label: String,
+    hold: Boolean,
+    onTap: () -> Unit,
+    onHolding: (Boolean) -> Unit,
+    onHeld: () -> Unit,
+) {
     val ink = LocalInk.current
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
+    val tapped by interaction.collectIsPressedAsState()
+    var held by remember { mutableStateOf(false) }
+    val fill = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    val holdingNow by rememberUpdatedState(onHolding)
+    val heldNow by rememberUpdatedState(onHeld)
+    val touch = if (hold) {
+        Modifier
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown().consume()
+                    held = true
+                    holdingNow(true)
+                    val filling = scope.launch {
+                        fill.animateTo(1f, tween(((1 - fill.value) * HOLD_MS).roundToInt(), easing = LinearEasing))
+                        heldNow()
+                    }
+                    // Up, or slid off it.
+                    waitForUpOrCancellation()?.consume()
+                    held = false
+                    holdingNow(false)
+                    if (filling.isActive) {
+                        filling.cancel()
+                        scope.launch { fill.animateTo(0f, tween(DRAIN_MS, easing = LinearOutSlowInEasing)) }
+                    }
+                }
+            }
+            .semantics {
+                role = Role.Button
+                onClick { onTap(); true }
+            }
+    } else {
+        Modifier.pressable(interaction, Role.Button, onTap)
+    }
     Row(
         Modifier
             .height(44.dp)
             .clip(CircleShape)
-            .background(if (pressed) ink.glassPressed else ink.glass)
-            .pressable(interaction, Role.Button, onClick)
-            .semantics { contentDescription = if (open) "Tap again to end the session" else "End session" }
+            .background(if (held || tapped) ink.glassPressed else ink.glass)
+            .drawBehind {
+                if (fill.value > 0f) drawRect(ink.deep.copy(alpha = 0.2f), size = size.copy(width = size.width * fill.value))
+            }
+            .then(touch)
+            .semantics {
+                contentDescription = when {
+                    !open -> "End session"
+                    hold -> "Hold to end the session"
+                    else -> "Tap again to end the session"
+                }
+            }
             .animateContentSize(tween(220))
             .padding(horizontal = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -402,13 +585,17 @@ fun EndSessionButton(open: Boolean, onClick: () -> Unit) {
         Canvas(Modifier.size(22.dp)) { Icons.close(this, ink.deep) }
         if (open) {
             BasicText(
-                "End session",
+                label,
                 Modifier.padding(start = 6.dp, end = 5.dp),
                 style = TextStyle(color = ink.deep, fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
             )
         }
     }
 }
+
+/** How long the ✕ is held to end a session, and how quickly its fill drains if let go. */
+const val HOLD_MS = 1_000
+private const val DRAIN_MS = 200
 
 /** Line icons on a 24-unit grid. */
 object Icons {
