@@ -13,8 +13,9 @@ import QuartzCore
 struct SessionView: View {
     @ObservedObject var model: SessionModel
     let session: ActiveSession
-    /// Starts with End session open, as the screen renderer shows it.
+    /// Starts with End session open, or held and this full, as the screen renderer shows them.
     let endOpen: Bool
+    let endHeld: Double?
     @State private var showVolume = false
     /// Whether End session is open, waiting for its second click.
     @State private var ending: Bool
@@ -41,11 +42,13 @@ struct SessionView: View {
     static let focusShown = Duration.seconds(3)
 
     /// `controlsShown` false starts focus mode's controls out of sight, as the screen renderer shows them.
-    init(model: SessionModel, session: ActiveSession, endOpen: Bool = false, controlsShown: Bool = true) {
+    init(model: SessionModel, session: ActiveSession, endOpen: Bool = false, endHeld: Double? = nil,
+         controlsShown: Bool = true) {
         self.model = model
         self.session = session
         self.endOpen = endOpen
-        _ending = State(initialValue: endOpen)
+        self.endHeld = endHeld
+        _ending = State(initialValue: endOpen || endHeld != nil)
         _stirredLately = State(initialValue: controlsShown)
     }
 
@@ -198,31 +201,32 @@ struct SessionView: View {
                 .popover(isPresented: $showVolume, arrowEdge: .bottom) {
                     volumePanel.padding(16)
                 }
-            EndSessionButton(open: endOpen, end: model.endSession, opened: { ending = $0 })
+            // Held for a second it ends the session; VoiceOver, which can't hold, presses twice.
+            EndSessionButton(open: endOpen, filled: endHeld, hold: !voiceOver.on, end: model.endSession,
+                             opened: { ending = $0 })
         }
         .padding(.top, 14)
         .padding(.horizontal, 16)
     }
 
-    /// How loud: one slider, or with the voice on, the tone's and the voice's, each named.
+    /// How loud: one slider, or with the voice on, the tone's and the voice's, each named. Each
+    /// gives a little when dragged past its ends (GiveSlider).
     @ViewBuilder private var volumePanel: some View {
         if model.voiceOn {
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
                 GridRow {
                     Text("Tone")
-                    Slider(value: $model.volume, in: 0...1).frame(width: 180)
-                        .accessibilityLabel("Tone volume")
+                    GiveSlider(value: $model.volume, label: "Tone volume").frame(width: 180)
                 }
                 GridRow {
                     Text("Voice")
-                    Slider(value: $model.voiceVolume, in: 0...1).frame(width: 180)
-                        .accessibilityLabel("Voice volume")
+                    GiveSlider(value: $model.voiceVolume, label: "Voice volume").frame(width: 180)
                 }
             }
         } else {
             HStack(spacing: 10) {
                 Image(systemName: "speaker.fill")
-                Slider(value: $model.volume, in: 0...1).frame(width: 180)
+                GiveSlider(value: $model.volume, label: "Volume").frame(width: 180)
                 Image(systemName: "speaker.wave.3.fill")
             }
         }

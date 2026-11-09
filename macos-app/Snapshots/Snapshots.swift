@@ -125,6 +125,54 @@ struct Snapshots {
         shoot("4-hold-end-open-night", night, SessionView(model: model, session: session(at: 13.6), endOpen: true))
         shoot("6-done-night", night, DoneView(model: model))
         shoot("6-done-noon", noon, DoneView(model: model))
+        // The gestures (Gestures.swift). The orb pulled down and to the right, then let go: just
+        // after, overshooting, wobbling, and its ring spreading. As Android's ScreenshotTest.theOrbCanBePoked.
+        func poke(letGoAgo: Double?) -> OrbPoke {
+            var p = OrbPoke(side: 112, still: false)
+            let now = CACurrentMediaTime()
+            let t0 = now - (letGoAgo ?? 0) - 0.176
+            p.down(.zero, at: t0)
+            for i in 1...10 { p.move(SIMD2(12, 10) * Double(i), at: t0 + 0.016 * Double(i)) }
+            if let ago = letGoAgo { p.up(at: now - ago, radius: 112 * 0.25) }
+            return p
+        }
+        shoot("8-poke-1-pulled-noon", noon, HomeView(model: model, poked: poke(letGoAgo: nil)))
+        shoot("8-poke-1-pulled-night", night, HomeView(model: model, poked: poke(letGoAgo: nil)))
+        for (name, ago) in [("2-let-go", 0.07), ("3-overshoot", 0.16), ("4-wobble", 0.3), ("5-ring", 1.0)] {
+            shoot("8-poke-\(name)-noon", noon, HomeView(model: model, poked: poke(letGoAgo: ago)))
+        }
+        // The session length slid from 6: between 10 and 20, over 20, and held back past 50.
+        let cycles = model.cycles
+        model.cycles = 6
+        let choices = SessionPlan.cycleChoices
+        let row = BeadSlide(count: choices.count, step: 54, size: 46, pointer: 0)
+        for (name, steps) in [("1-between", 1.5), ("2-over-20", 2.0), ("3-held-back-past-50", 6.0)] {
+            var slide = BeadSlide(count: choices.count, step: 54, size: 46, pointer: row.slot(1))
+            let now = CACurrentMediaTime()
+            for i in 1...8 { slide.move(row.slot(1) + 54 * steps * Double(i) / 8, at: now - 0.2 + 0.025 * Double(i)) }
+            shoot("8-slide-\(name)-noon", noon, HomeView(model: model, slid: slide))
+            shoot("8-slide-\(name)-night", night, HomeView(model: model, slid: slide))
+        }
+        model.cycles = cycles
+        // The ✕ held half way: open, saying what to do, and half full.
+        shoot("8-hold-to-end-noon", noon, SessionView(model: model, session: session(at: 13.6), endHeld: 0.55))
+        shoot("8-hold-to-end-night", night, SessionView(model: model, session: session(at: 13.6), endHeld: 0.55))
+        // The volume slider at rest at its end, and pulled on past it (as in its popover).
+        let panel = VStack(spacing: 18) {
+            ForEach([0.0, 6.5, -6.5], id: \.self) { stretch in
+                HStack(spacing: 10) {
+                    Image(systemName: "speaker.fill")
+                    GiveSlider(value: .constant(stretch < 0 ? 0 : 1), label: "Volume", stretched: stretch)
+                        .frame(width: 180)
+                    Image(systemName: "speaker.wave.3.fill")
+                }
+            }
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color(white: 0.96)))
+        .environment(\.colorScheme, .light)
+        shoot("8-volume-gives", noon, panel)
+
         // The orb in each sky's own colours through the day, holding full and holding empty.
         for (name, hour, minute) in [("1-first-light", 6, 50), ("2-sunrise", 7, 15), ("3-morning", 8, 30),
                                      ("4-noon", 12, 30), ("5-golden", 17, 35), ("6-sunset", 18, 40),
