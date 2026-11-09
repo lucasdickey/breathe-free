@@ -49,10 +49,24 @@ hold for four, with an eight-second settle at the start.
   for three seconds; Space and Escape still pause and end the session while they're out of
   sight. They stay while the session is paused, while End session or the volume is open,
   and always with VoiceOver on. With Reduce Motion on they fade in place.
-- The Force Touch trackpad taps at each change if a finger is resting on it.
+- **Things that answer the hand** (`Core/Gestures.swift`, after the Android app's):
+  - The orb on the home and Well done screens can be pulled about. It gives a little under
+    the pointer, follows a drag a short way, held back more the further it goes and drawn out
+    toward the pointer, and let go it springs home with the drip's wobble and sends out a ring.
+  - Once the session length is open, it can be slid along. The chosen colour comes away under
+    the pointer as a bead, ticking at each drop. Let go, it carries on to the drop it was
+    heading for, and holds back past the ends.
+  - The volume sliders give a little past either end and spring back.
+  - The ✕ ends a session when held for a second. It fills as it is held and drains if let go
+    too soon; a click only opens it into "Hold to end". With VoiceOver on, two presses end it.
+
+  With Reduce Motion on, the orb still follows the pointer, but goes home without the wobble
+  or the ring.
+- The Force Touch trackpad taps at each change if a finger is resting on it, and ticks as the
+  bead passes a drop, a slider reaches its end, or the ✕ is held long enough.
 
 Keys: **Return** begins, **Space** pauses, and **Escape** pressed twice ends a session (the
-first press opens End session, the second ends it, as two clicks on the ✕ do).
+first press opens End session, the second ends it).
 
 ## How the timing stays exact
 
@@ -107,6 +121,18 @@ The tests check phase boundaries and countdowns, that every bell starts on the e
 sample of its phase change, that the sound follows a device clock running fast, that
 the air layer is silent during holds, that output never clips, and that the words' specks
 pass under the box (followed through every gust, sampled from the real words on a Mac).
+`GesturesTests` checks the gestures' motion on the Android app's cases: a slow slide from 6
+picks 20, a flick picks 36, past the last drop it picks 50, and a held ✕ fills in a second.
+
+`Drive/Drive.swift` works the gestures with the mouse in a real window, as someone would.
+It pulls the orb, slides the session length, drags the volume past its end, holds the ✕, and
+presses Escape twice in a session, then checks what happened and saves a picture of each step.
+"Build apps" runs it on every push (`BreatheFree-macOS-drive`). It needs a screen:
+
+```bash
+swiftc -parse-as-library -o drive macos-app/BreatheFree/{Core,Audio,Models,Views}/*.swift \
+  macos-app/Drive/Drive.swift && ./drive <output folder>
+```
 
 ## Project layout
 
@@ -123,6 +149,7 @@ macos-app/
     │   ├── BreathSynth.swift     # the generated sound
     │   ├── Gust.swift            # the words' specks on the wind
     │   ├── Drip.swift            # the orb dripping into place at the start
+    │   ├── Gestures.swift        # the pulled orb, the slid bead, the giving slider, the held ✕
     │   └── WordSpecks.swift      # a word sampled into specks
     ├── Audio/SessionAudio.swift  # AVAudioEngine, aligned to the session clock
     ├── Models/

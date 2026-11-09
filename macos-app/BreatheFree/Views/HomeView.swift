@@ -12,11 +12,17 @@ struct HomeView: View {
     @State private var choosing: Bool
     /// Whether the settings are fanned out.
     @State private var settingsOpen: Bool
+    /// A pull on the orb, and a slide along the session length, to draw, for the screen renderer.
+    private let poked: OrbPoke?
+    private let slid: BeadSlide?
 
-    init(model: SessionModel, choosing: Bool = false, settingsOpen: Bool = false) {
+    init(model: SessionModel, choosing: Bool = false, settingsOpen: Bool = false, poked: OrbPoke? = nil,
+         slid: BeadSlide? = nil) {
         self.model = model
-        _choosing = State(initialValue: choosing)
+        _choosing = State(initialValue: choosing || slid != nil)
         _settingsOpen = State(initialValue: settingsOpen)
+        self.poked = poked
+        self.slid = slid
     }
 
     var body: some View {
@@ -64,16 +70,18 @@ struct HomeView: View {
 
     private var content: some View {
         VStack(spacing: 0) {
-            AmbientOrb(colors: ink.orb, sun: ink.sun)
+            // It can be pulled about, and let go (AmbientOrb).
+            AmbientOrb(colors: ink.orb, sun: ink.sun, poked: poked)
                 .frame(width: 112, height: 112)
+                .allowsHitTesting(!choosing && !settingsOpen)
             Text("Breathe Free")
                 .font(.system(size: 34, weight: .light))
                 .foregroundColor(ink.deep.color)
                 .padding(.top, 12)
 
-            CyclePicker(choices: SessionPlan.cycleChoices, selection: $model.cycles, open: $choosing) { n in
-                "\(n) cycles, \(clockText(n * Int(SessionPlan.cycleSeconds)))"
-            }
+            CyclePicker(choices: SessionPlan.cycleChoices, selection: $model.cycles, open: $choosing,
+                        describe: { n in "\(n) cycles, \(clockText(n * Int(SessionPlan.cycleSeconds)))" },
+                        slid: slid)
             .allowsHitTesting(!settingsOpen)
             .padding(.top, 56)
             Text("\(model.cycles) cycles · \(clockText(model.cycles * Int(SessionPlan.cycleSeconds)))")
