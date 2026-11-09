@@ -8,7 +8,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import com.breathefree.app.core.Phase
 
-/** A light tap at each change of phase: firmer for breathing, softer for holds. */
+/** A light tap at each change of phase: firmer for breathing, softer for holds; and ticks under the finger. */
 class Haptics(context: Context) {
     private val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= 31) {
         (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
@@ -23,6 +23,9 @@ class Haptics(context: Context) {
     }
 
     fun complete() = play(VibrationEffect.EFFECT_DOUBLE_CLICK, 30, 160)
+
+    /** The lightest tap there is: a drop passed under the finger, a slider at its end. */
+    fun tick() = play(VibrationEffect.EFFECT_TICK, 8, 50)
 
     private fun play(predefined: Int, fallbackMs: Long, fallbackAmplitude: Int) {
         val v = vibrator ?: return

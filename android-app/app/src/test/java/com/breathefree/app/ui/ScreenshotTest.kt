@@ -7,12 +7,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import com.breathefree.app.BreatheController
 import com.breathefree.app.Screen
@@ -151,6 +153,86 @@ class ScreenshotTest {
         compose.onNodeWithContentDescription("End session").performClick()
         compose.mainClock.advanceTimeBy(400)
         shot("end-noon-2-open")
+    }
+
+    @Test
+    fun theOrbCanBePoked() {
+        val controller = controller()
+        compose.setContent { BreatheApp(controller) { today(12, 30) } }
+        compose.mainClock.advanceTimeBy(1_000)
+        val title = compose.onNodeWithText("Breathe Free").getBoundsInRoot()
+        val orb = with(compose.density) { Offset(((title.left + title.right) / 2).toPx(), (title.top - 8.dp - 66.dp).toPx()) }
+        compose.onRoot().performTouchInput {
+            down(orb)
+            repeat(10) { moveBy(Offset(36f, 30f)) }
+        }
+        compose.mainClock.advanceTimeBy(50)
+        shot("poke-1-pulled")
+        compose.onRoot().performTouchInput { up() }
+        for ((ms, name) in listOf(70L to "2-let-go", 90L to "3-overshoot", 140L to "4-wobble", 700L to "5-ring")) {
+            compose.mainClock.advanceTimeBy(ms)
+            shot("poke-$name")
+        }
+    }
+
+    @Test
+    fun theSessionLengthSlides() {
+        val controller = controller()
+        controller.chooseCycles(6)
+        compose.setContent { BreatheApp(controller) { today(12, 30) } }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.onNodeWithContentDescription("Session length", substring = true).performClick()
+        compose.mainClock.advanceTimeBy(700)
+        val drop = compose.onNodeWithContentDescription("10 cycles,", substring = true).getBoundsInRoot()
+        val at = with(compose.density) { Offset((drop.left - 4.dp - 28.dp).toPx(), ((drop.top + drop.bottom) / 2).toPx()) }
+        val step = with(compose.density) { 56.dp.toPx() }
+        compose.onRoot().performTouchInput {
+            down(at)
+            repeat(6) { moveBy(Offset(step * 0.25f, 0f), delayMillis = 40) }
+        }
+        compose.mainClock.advanceTimeBy(50)
+        shot("slide-1-between")
+        compose.onRoot().performTouchInput { repeat(4) { moveBy(Offset(step * 0.25f, 0f), delayMillis = 40) } }
+        compose.mainClock.advanceTimeBy(50)
+        shot("slide-2-over-20")
+        compose.onRoot().performTouchInput { repeat(16) { moveBy(Offset(step * 0.25f, 0f), delayMillis = 40) } }
+        compose.mainClock.advanceTimeBy(50)
+        shot("slide-3-held-back-past-50")
+        compose.onRoot().performTouchInput { up() }
+        compose.mainClock.advanceTimeBy(120)
+        shot("slide-4-let-go")
+        compose.mainClock.advanceTimeBy(800)
+        shot("slide-5-picked")
+        assertEquals(50, controller.cycles)
+    }
+
+    @Test
+    fun theVolumeGivesAndTheCrossFills() {
+        val controller = controller()
+        controller.chooseCycles(2)
+        compose.setContent { BreatheApp(controller) { today(12, 30) } }
+        compose.mainClock.advanceTimeBy(2_500)
+        session(controller, "give", listOf(6.0 to "0-session"))
+        compose.onNodeWithContentDescription("Volume", substring = true).performClick()
+        compose.mainClock.advanceTimeBy(300)
+        val slider = compose.onNodeWithContentDescription("Volume")
+        slider.performTouchInput {
+            down(center)
+            repeat(12) { moveBy(Offset(40f, 0f)) }
+        }
+        compose.mainClock.advanceTimeBy(50)
+        shot("give-1-stretched")
+        slider.performTouchInput { up() }
+        compose.mainClock.advanceTimeBy(60)
+        shot("give-2-springing-back")
+        compose.mainClock.advanceTimeBy(4_000)
+        compose.onNodeWithContentDescription("End session").performTouchInput { down(center) }
+        compose.mainClock.advanceTimeBy(550)
+        shot("give-3-cross-half-held")
+        compose.onNodeWithText("Hold to end").performTouchInput { up() }
+        compose.mainClock.advanceTimeBy(100)
+        shot("give-4-cross-let-go")
+        assertEquals(Screen.SESSION, controller.screen)
     }
 
     @Test

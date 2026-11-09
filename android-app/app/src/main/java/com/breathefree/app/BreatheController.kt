@@ -123,6 +123,11 @@ class BreatheController(
         prefs.edit().putBoolean(KEY_HAPTICS, on).apply()
     }
 
+    /** A tick under the finger, with vibration on. */
+    fun tick() {
+        if (hapticsOn) haptics.tick()
+    }
+
     fun chooseFocus(on: Boolean) {
         focusOn = on
         prefs.edit().putBoolean(KEY_FOCUS, on).apply()

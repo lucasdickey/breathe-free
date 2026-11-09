@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ApplicationProvider
 import com.breathefree.app.BreatheController
 import com.breathefree.app.Screen
@@ -75,24 +76,42 @@ class SessionPauseTest {
     }
 
     @Test
-    fun endingTakesTwoTaps() {
+    fun holdingTheCrossEndsTheSession() {
         val controller = startSession()
         compose.mainClock.advanceTimeBy(5_000)
-        // The first tap only opens the ✕ into "End session".
-        compose.onNodeWithContentDescription("End session").performClick()
-        compose.mainClock.advanceTimeBy(100)
-        compose.onNodeWithText("End session").assertIsDisplayed()
+        val cross = compose.onNodeWithContentDescription("End session")
+        cross.performTouchInput { down(center) }
+        compose.mainClock.advanceTimeBy(500)
+        // Pressed, it opens and says what to do; half way there, the session carries on.
+        compose.onNodeWithText("Hold to end").assertIsDisplayed()
         assertEquals(Screen.SESSION, controller.screen)
-        // A second tap straight away, as a double tap on the ✕ would be, does nothing.
-        compose.onNodeWithText("End session").performClick()
-        compose.waitForIdle()
-        assertEquals(Screen.SESSION, controller.screen)
-        // A moment later, a tap on it ends the session.
-        compose.mainClock.advanceTimeBy(400)
-        compose.onNodeWithText("End session").performClick()
-        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(600)
         assertEquals(Screen.HOME, controller.screen)
         assertNull(controller.session)
+    }
+
+    @Test
+    fun lettingGoTooSoonOrTappingDoesNotEnd() {
+        val controller = startSession()
+        compose.mainClock.advanceTimeBy(5_000)
+        val cross = compose.onNodeWithContentDescription("End session")
+        cross.performTouchInput { down(center) }
+        compose.mainClock.advanceTimeBy(800)
+        compose.onNodeWithText("Hold to end").performTouchInput { up() }
+        compose.mainClock.advanceTimeBy(1_000)
+        assertEquals(Screen.SESSION, controller.screen)
+        // Taps, however many, only open it.
+        repeat(2) {
+            compose.onNodeWithText("Hold to end").performClick()
+            compose.mainClock.advanceTimeBy(400)
+        }
+        assertEquals(Screen.SESSION, controller.screen)
+        // A hold after a let-go fills from empty again, not from where it was.
+        compose.onNodeWithText("Hold to end").performTouchInput { down(center) }
+        compose.mainClock.advanceTimeBy(700)
+        assertEquals(Screen.SESSION, controller.screen)
+        compose.mainClock.advanceTimeBy(400)
+        assertEquals(Screen.HOME, controller.screen)
     }
 
     @Test
@@ -100,12 +119,10 @@ class SessionPauseTest {
         val controller = startSession()
         compose.mainClock.advanceTimeBy(5_000)
         compose.onNodeWithContentDescription("End session").performClick()
-        compose.mainClock.advanceTimeBy(4_500)
-        compose.onNodeWithText("End session").assertDoesNotExist()
-        // Closed again, a tap only opens it.
-        compose.onNodeWithContentDescription("End session").performClick()
         compose.mainClock.advanceTimeBy(100)
-        compose.onNodeWithText("End session").assertIsDisplayed()
+        compose.onNodeWithText("Hold to end").assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(4_500)
+        compose.onNodeWithText("Hold to end").assertDoesNotExist()
         assertEquals(Screen.SESSION, controller.screen)
     }
 
