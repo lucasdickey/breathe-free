@@ -95,6 +95,8 @@ struct CyclePicker: View {
     @State private var motion: PickerMotion?
     /// The bead, while it is out: under the pointer, or on its way to a drop once let go.
     @State private var slide: BeadSlide?
+    /// Whether a slide is under way: back to false when it ends or is called off.
+    @GestureState private var sliding = false
 
     private let size: CGFloat = 46
     private let gap: CGFloat = 8
@@ -131,6 +133,10 @@ struct CyclePicker: View {
             .contentShape(Rectangle())
         }
         .simultaneousGesture(slideGesture(width: Double(width)), including: open ? .all : .subviews)
+        // Ended, or called off: the bead is let go either way.
+        .onChange(of: sliding) { on in
+            if !on, slide?.isSliding == true { slide?.up(at: MediaClock.now()) }
+        }
         .onChange(of: open) { isOpen in
             // Folded from outside, by a click elsewhere or Escape: the drops go from where they are.
             let now = MediaClock.now()
@@ -154,6 +160,7 @@ struct CyclePicker: View {
     private func slideGesture(width: Double) -> some Gesture {
         // Far enough to mean it, it is a slide rather than a click on a drop.
         DragGesture(minimumDistance: 4)
+            .updating($sliding) { _, sliding, _ in sliding = true }
             .onChanged { value in
                 let t = MediaClock.now()
                 if slide?.isSliding != true {
@@ -314,6 +321,8 @@ struct EndSessionButton: View {
     @State private var fill = HoldFill()
     /// Slid off while held: it lets go, and waits for the next press.
     @State private var slidOff = false
+    /// Whether the pointer is on it: back to false when the press ends or is called off.
+    @GestureState private var touching = false
     @State private var size = CGSize.zero
     /// A fill to draw, for the screen renderer.
     private let filled: Double?
@@ -363,6 +372,13 @@ struct EndSessionButton: View {
             }
         }
         .gesture(holding, including: hold ? .all : .subviews)
+        // Ended, or called off: it lets go either way, so a press that is lost never ends a session.
+        .onChange(of: touching) { on in
+            if !on {
+                fill.release(at: MediaClock.now())
+                slidOff = false
+            }
+        }
         .gesture(TapGesture().onEnded { ask() }, including: hold ? .subviews : .all)
         // Escape: the same two presses as VoiceOver.
         .background {
@@ -403,6 +419,7 @@ struct EndSessionButton: View {
 
     private var holding: some Gesture {
         DragGesture(minimumDistance: 0)
+            .updating($touching) { _, touching, _ in touching = true }
             .onChanged { value in
                 let t = MediaClock.now()
                 let on = CGRect(origin: .zero, size: size).insetBy(dx: -6, dy: -6).contains(value.location)
@@ -444,6 +461,8 @@ struct GiveSlider: View {
     @State private var give = Give()
     @State private var dragging = false
     @State private var atEnd = false
+    /// Whether the pointer is on it: back to false when the drag ends or is called off.
+    @GestureState private var touching = false
 
     private static let thumb = 9.0
     private static let track = 4.0
@@ -457,6 +476,12 @@ struct GiveSlider: View {
             }
             .contentShape(Rectangle())
             .gesture(drag(width: Double(g.size.width)))
+            .onChange(of: touching) { on in
+                if !on {
+                    dragging = false
+                    give.release(at: MediaClock.now())
+                }
+            }
         }
         .frame(height: 22)
         .accessibilityRepresentation {
@@ -488,6 +513,7 @@ struct GiveSlider: View {
 
     private func drag(width: Double) -> some Gesture {
         DragGesture(minimumDistance: 0)
+            .updating($touching) { _, touching, _ in touching = true }
             .onChanged { v in
                 let r = Self.thumb
                 let x = Double(v.location.x)

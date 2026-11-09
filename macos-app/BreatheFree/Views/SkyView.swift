@@ -51,6 +51,8 @@ struct AmbientOrb: View {
     @Environment(\.ink) private var ink
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var poke: OrbPoke?
+    /// Whether the pointer is on it: back to false when the drag ends or is called off.
+    @GestureState private var pressing = false
 
     /// How far round its frame it draws, as a multiple of its side: enough for the furthest pull,
     /// drawn out, and the ring at its widest.
@@ -71,6 +73,10 @@ struct AmbientOrb: View {
             .frame(width: geo.size.width, height: geo.size.height)
             .contentShape(Rectangle())
             .gesture(pull(side: side))
+            // Ended, or called off (as when the window loses the pointer): let go either way.
+            .onChange(of: pressing) { held in
+                if !held { letGo(side: side) }
+            }
         }
         .accessibilityHidden(true)
     }
@@ -101,6 +107,7 @@ struct AmbientOrb: View {
 
     private func pull(side: Double) -> some Gesture {
         DragGesture(minimumDistance: 0)
+            .updating($pressing) { _, pressing, _ in pressing = true }
             .onChanged { value in
                 let t = MediaClock.now()
                 if poke?.isHeld != true {
@@ -113,9 +120,11 @@ struct AmbientOrb: View {
                 }
                 poke?.move(SIMD2(Double(value.location.x), Double(value.location.y)), at: t)
             }
-            .onEnded { _ in
-                let t = MediaClock.now()
-                poke?.up(at: t, radius: radius(side: side, at: t))
-            }
+            .onEnded { _ in letGo(side: side) }
+    }
+
+    private func letGo(side: Double) {
+        let t = MediaClock.now()
+        poke?.up(at: t, radius: radius(side: side, at: t))
     }
 }
