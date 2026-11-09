@@ -93,6 +93,10 @@ class BreatheController(
     var focusOn by mutableStateOf(prefs.getBoolean(KEY_FOCUS, false))
         private set
 
+    /** Whether focus mode has once said how to bring its controls back; it says so only once. */
+    var focusHintSeen by mutableStateOf(prefs.getBoolean(KEY_FOCUS_HINT, false))
+        private set
+
     private var voiceClips: Future<VoiceClips?>? = null
 
     var screen by mutableStateOf(Screen.HOME)
@@ -126,6 +130,11 @@ class BreatheController(
     fun chooseFocus(on: Boolean) {
         focusOn = on
         prefs.edit().putBoolean(KEY_FOCUS, on).apply()
+    }
+
+    fun sawFocusHint() {
+        focusHintSeen = true
+        prefs.edit().putBoolean(KEY_FOCUS_HINT, true).apply()
     }
 
     fun chooseVoice(on: Boolean) {
@@ -258,6 +267,7 @@ class BreatheController(
         const val KEY_VOICE = "voice"
         const val KEY_VOICE_VOLUME = "voiceVolume"
         const val KEY_FOCUS = "focus"
+        const val KEY_FOCUS_HINT = "focusHintSeen"
         const val DEFAULT_VOLUME = 1f // as loud as it played before it had a slider
         const val VOICE_WAIT_MS = 1_500L
         const val LEAD_NANOS = 350_000_000L

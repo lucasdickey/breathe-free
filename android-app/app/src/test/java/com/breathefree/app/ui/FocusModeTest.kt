@@ -1,5 +1,6 @@
 package com.breathefree.app.ui
 
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Context
 import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
@@ -27,13 +28,15 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.util.ReflectionHelpers
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
 /**
  * Focus mode, on the real session screen: the top bar and the cycle count stay in sight for a
- * few seconds, then keep out of it until the screen is touched; pausing, ending and TalkBack
- * keep them in sight. Without focus mode they never go.
+ * few seconds, then keep out of it until the screen is touched, saying so the first time;
+ * pausing, ending and TalkBack or Switch Access keep them in sight. Without focus mode they
+ * never go.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -45,9 +48,11 @@ class FocusModeTest {
     private val noon = ZonedDateTime.of(2026, 10, 7, 12, 30, 0, 0, ZoneId.of("America/Los_Angeles"))
     private val context get() = ApplicationProvider.getApplicationContext<Context>()
 
-    private fun startSession(focus: Boolean): BreatheController {
+    private fun startSession(focus: Boolean, firstTime: Boolean = false): BreatheController {
         compose.mainClock.autoAdvance = false
         val controller = BreatheController(context) { compose.mainClock.currentTime * 1_000_000L }
+        // Every test but the first-time one has seen focus mode's word on bringing them back.
+        if (!firstTime) controller.sawFocusHint()
         controller.chooseCycles(2)
         // No audio thread under the test clock: silent, and no voice (which speaks even then).
         controller.chooseSound(SoundMode.SILENT)
@@ -73,6 +78,19 @@ class FocusModeTest {
     private fun assertOutOfSight() {
         pause.assertDoesNotExist()
         count.assertDoesNotExist()
+    }
+
+    private val hint get() = compose.onNodeWithText("Tap to show the controls")
+
+    /** A service that is on, able to touch the screen for someone, as Switch Access is, or only to read it. */
+    private fun serviceOn(touches: Boolean) {
+        val info = AccessibilityServiceInfo()
+        val can = if (touches) AccessibilityServiceInfo.CAPABILITY_CAN_PERFORM_GESTURES else AccessibilityServiceInfo.CAPABILITY_CAN_RETRIEVE_WINDOW_CONTENT
+        ReflectionHelpers.callInstanceMethod<Unit>(info, "setCapabilities", ReflectionHelpers.ClassParameter.from(Int::class.javaPrimitiveType, can))
+        shadowOf(compose.activity.getSystemService(AccessibilityManager::class.java)).apply {
+            setEnabled(true)
+            setEnabledAccessibilityServiceList(listOf(info))
+        }
     }
 
     /** A tap on the open sky between the words and the cycle count. */
@@ -150,5 +168,51 @@ class FocusModeTest {
         startSession(focus = true)
         compose.mainClock.advanceTimeBy(6_000)
         assertInSight()
+    }
+
+    @Test
+    fun theFirstTimeTheyGoAWordSaysHowToBringThemBack() {
+        val controller = startSession(focus = true, firstTime = true)
+        hint.assertDoesNotExist()
+        compose.mainClock.advanceTimeBy(2_700)
+        assertOutOfSight()
+        hint.assertIsDisplayed()
+        assertTrue(controller.focusHintSeen)
+        // It goes by itself after a few seconds...
+        compose.mainClock.advanceTimeBy(4_600)
+        hint.assertDoesNotExist()
+        // ...and isn't said again.
+        tapTheSky()
+        compose.mainClock.advanceTimeBy(3_500)
+        assertOutOfSight()
+        hint.assertDoesNotExist()
+        assertTrue(BreatheController(context).focusHintSeen)
+    }
+
+    @Test
+    fun aTouchTakesTheWordAway() {
+        startSession(focus = true, firstTime = true)
+        compose.mainClock.advanceTimeBy(2_700)
+        hint.assertIsDisplayed()
+        tapTheSky()
+        compose.mainClock.advanceTimeBy(200)
+        assertInSight()
+        hint.assertDoesNotExist()
+    }
+
+    @Test
+    fun withSwitchAccessTheyStay() {
+        serviceOn(touches = true)
+        startSession(focus = true)
+        compose.mainClock.advanceTimeBy(6_000)
+        assertInSight()
+    }
+
+    @Test
+    fun aServiceThatOnlyReadsTheScreenDoesntKeepThem() {
+        serviceOn(touches = false)
+        startSession(focus = true)
+        compose.mainClock.advanceTimeBy(2_700)
+        assertOutOfSight()
     }
 }

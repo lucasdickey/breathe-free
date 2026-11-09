@@ -156,7 +156,9 @@ struct CyclePicker: View {
         .zIndex(current ? 1 : 0)
         .allowsHitTesting(shown)
         .accessibilityHidden(!shown)
-        .accessibilityLabel(open ? describe(n) : "Session length: \(describe(n)). Click to change.")
+        .accessibilityLabel(open ? describe(n) : "Session length: \(describe(n))")
+        // What a press does goes in the hint, which VoiceOver says after a pause, not in the name.
+        .accessibilityHint(open ? "" : "Shows the other session lengths.")
         .accessibilityAddTraits(open && current ? .isSelected : [])
     }
 

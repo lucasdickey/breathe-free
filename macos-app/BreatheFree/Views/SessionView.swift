@@ -33,20 +33,27 @@ struct SessionView: View {
     @State private var stirredLately: Bool
     @State private var events: Any?
     @StateObject private var voiceOver = VoiceOverWatch()
+    /// The first time they go, a word on how to bring them back, where the count was.
+    @State private var focusHint: Bool
 
     /// A frame drawn now reaches the screen about one refresh later; aim the picture there.
     static let displayLead = 1.0 / 60.0
 
     /// How long focus mode's controls stay in sight after the last stir.
     static let focusShown = Duration.seconds(3)
+    /// How long the first-time word on bringing them back stays, unless the mouse moves first.
+    static let focusHintShown = Duration.seconds(4)
 
-    /// `controlsShown` false starts focus mode's controls out of sight, as the screen renderer shows them.
-    init(model: SessionModel, session: ActiveSession, endOpen: Bool = false, controlsShown: Bool = true) {
+    /// `controlsShown` false starts focus mode's controls out of sight, and `focusHint` with the
+    /// first-time word on bringing them back, as the screen renderer shows them.
+    init(model: SessionModel, session: ActiveSession, endOpen: Bool = false, controlsShown: Bool = true,
+         focusHint: Bool = false) {
         self.model = model
         self.session = session
         self.endOpen = endOpen
         _ending = State(initialValue: endOpen)
         _stirredLately = State(initialValue: controlsShown)
+        _focusHint = State(initialValue: focusHint)
     }
 
     private var tucked: Bool {
@@ -127,10 +134,13 @@ struct SessionView: View {
                                 .accessibilityAddTraits(.updatesFrequently)
                         }
 
-                        if frame.stage == .settle {
-                            Text("Soften your shoulders and jaw")
+                        // It goes with "Settle in": as the word blows away, or as the words cross.
+                        let hint = session.plan.hint(at: t, onTheWind: !reduceMotion)
+                        if hint > 0 {
+                            Text(SessionPlan.settleHint)
                                 .font(.system(size: 15))
                                 .foregroundColor(ink.soft.color)
+                                .opacity(hint)
                                 .position(x: g.cx, y: g.cy + g.half + 96)
                         }
                     }
@@ -145,12 +155,26 @@ struct SessionView: View {
                     .padding(.bottom, 26)
                     .modifier(Tucked(away: tucked, up: false, reduceMotion: reduceMotion))
 
+                    // Laid out as the count is, so it sits just where the count was and moves nothing.
+                    VStack(spacing: 10) {
+                        Text("Move the pointer to show the controls")
+                            .font(.system(size: 13))
+                            .foregroundColor(ink.soft.color)
+                        Color.clear.frame(width: 160, height: 3)
+                    }
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, 26)
+                    .opacity(focusHint ? 1 : 0)
+                    .animation(.easeInOut(duration: focusHint ? 0.6 : 0.4), value: focusHint)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(!focusHint)
+
                     Text(clockText(Int((frame.remaining - 1e-9).rounded(.up))))
                         .font(.system(size: 15).monospacedDigit())
                         .foregroundColor(ink.deep.color)
                         .frame(maxHeight: .infinity, alignment: .top)
                         .padding(.top, 22)
-                        .accessibilityLabel("\(clockText(Int(frame.remaining.rounded(.up)))) left")
+                        .accessibilityLabel("\(spokenClock(Int((frame.remaining - 1e-9).rounded(.up)))) left")
                         .modifier(Tucked(away: tucked, up: true, reduceMotion: reduceMotion))
                 }
                 .animation(.easeInOut(duration: 0.35), value: paused)
@@ -183,6 +207,18 @@ struct SessionView: View {
         // As a video does, the pointer keeps out of sight with them until the mouse moves.
         .onChange(of: tucked) { away in
             if away && NSApp.isActive { NSCursor.setHiddenUntilMouseMoves(true) }
+        }
+        // The first-time word goes when they come back, or after a few seconds.
+        .task(id: tucked) {
+            guard tucked else {
+                focusHint = false
+                return
+            }
+            guard !model.focusHintSeen else { return }
+            model.sawFocusHint()
+            focusHint = true
+            try? await Task.sleep(for: Self.focusHintShown)
+            if !Task.isCancelled { focusHint = false }
         }
     }
 

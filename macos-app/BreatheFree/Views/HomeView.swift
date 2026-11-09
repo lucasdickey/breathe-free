@@ -72,7 +72,7 @@ struct HomeView: View {
                 .padding(.top, 12)
 
             CyclePicker(choices: SessionPlan.cycleChoices, selection: $model.cycles, open: $choosing) { n in
-                "\(n) cycles, \(clockText(n * Int(SessionPlan.cycleSeconds)))"
+                "\(n) cycles, \(spokenClock(n * Int(SessionPlan.cycleSeconds)))"
             }
             .allowsHitTesting(!settingsOpen)
             .padding(.top, 56)

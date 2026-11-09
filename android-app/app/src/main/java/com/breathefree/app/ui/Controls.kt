@@ -290,8 +290,9 @@ fun CyclePicker(
                                 contentDescription = describe(choices[i])
                             }
                         current -> Modifier
-                            .pressable(interaction, Role.Button, onOpen)
-                            .semantics { contentDescription = "Session length: ${describe(choices[i])}. Tap to change." }
+                            // TalkBack: "Session length: …, double-tap to change".
+                            .clickable(interaction, indication = null, onClickLabel = "change", role = Role.Button, onClick = onOpen)
+                            .semantics { contentDescription = "Session length: ${describe(choices[i])}" }
                         else -> Modifier.clearAndSetSemantics { }
                     }
                     Box(
@@ -301,9 +302,10 @@ fun CyclePicker(
                             .then(touch),
                         contentAlignment = Alignment.Center,
                     ) {
+                        // The drop's description says the count already, so TalkBack doesn't read it twice.
                         BasicText(
                             choices[i].toString(),
-                            modifier = Modifier.graphicsLayer { alpha = drops()[i].label },
+                            modifier = Modifier.graphicsLayer { alpha = drops()[i].label }.clearAndSetSemantics { },
                             style = TextStyle(
                                 fontSize = 17.sp,
                                 fontWeight = if (current) FontWeight.SemiBold else FontWeight.Normal,

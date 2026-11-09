@@ -47,8 +47,9 @@ hold for four, with an eight-second settle at the start.
   the window and the cycle count slides down, both fading as they go, and the pointer
   hides with them. Moving the mouse over the window, a click or a key brings them back
   for three seconds; Space and Escape still pause and end the session while they're out of
-  sight. They stay while the session is paused, while End session or the volume is open,
-  and always with VoiceOver on. With Reduce Motion on they fade in place.
+  sight. The first time they go, "Move the pointer to show the controls" shows where the
+  count was for a few seconds. They stay while the session is paused, while End session or
+  the volume is open, and always with VoiceOver on. With Reduce Motion on they fade in place.
 - The Force Touch trackpad taps at each change if a finger is resting on it.
 
 Keys: **Return** begins, **Space** pauses, and **Escape** pressed twice ends a session (the

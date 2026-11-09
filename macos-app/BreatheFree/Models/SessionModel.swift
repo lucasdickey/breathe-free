@@ -52,6 +52,14 @@ final class SessionModel: ObservableObject {
         didSet { defaults.set(focusOn, forKey: Keys.focus) }
     }
 
+    /// Whether focus mode has once said how to bring its controls back; it says so only once.
+    @Published private(set) var focusHintSeen: Bool
+
+    func sawFocusHint() {
+        focusHintSeen = true
+        defaults.set(true, forKey: Keys.focusHint)
+    }
+
     @Published private(set) var screen: Screen = .home
     @Published private(set) var session: ActiveSession?
 
@@ -76,6 +84,7 @@ final class SessionModel: ObservableObject {
         voiceVolume = defaults.object(forKey: Keys.voiceVolume) as? Double ?? savedVolume
         voiceOn = defaults.object(forKey: Keys.voice) as? Bool ?? true
         focusOn = defaults.bool(forKey: Keys.focus)
+        focusHintSeen = defaults.bool(forKey: Keys.focusHint)
         if voiceOn { prepareVoice() }
     }
 
@@ -203,5 +212,6 @@ final class SessionModel: ObservableObject {
         static let voice = "voice"
         static let voiceVolume = "voiceVolume"
         static let focus = "focus"
+        static let focusHint = "focusHintSeen"
     }
 }
