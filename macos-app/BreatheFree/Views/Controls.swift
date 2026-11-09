@@ -469,11 +469,18 @@ struct GiveSlider: View {
 
     var body: some View {
         GeometryReader { g in
-            TimelineView(.animation) { _ in
-                Canvas { context, size in
-                    draw(&context, size: size, stretch: stretched ?? give.stretch(at: MediaClock.now()))
+            ZStack {
+                // Drawn a little wider than its place, so the knob isn't cut off as it stretches.
+                TimelineView(.animation) { _ in
+                    Canvas { context, size in
+                        draw(&context, width: Double(g.size.width), height: Double(size.height),
+                             stretch: stretched ?? give.stretch(at: MediaClock.now()))
+                    }
                 }
+                .frame(width: g.size.width + 2 * Give.limit, height: g.size.height)
+                .allowsHitTesting(false)
             }
+            .frame(width: g.size.width, height: g.size.height)
             .contentShape(Rectangle())
             .gesture(drag(width: Double(g.size.width)))
             .onChange(of: touching) { on in
@@ -489,9 +496,10 @@ struct GiveSlider: View {
         }
     }
 
-    private func draw(_ context: inout GraphicsContext, size: CGSize, stretch s: Double) {
-        let r = Self.thumb, y = Double(size.height) / 2
-        let start = r + min(s, 0), end = Double(size.width) - r + max(s, 0)
+    /// The slider `width` across, drawn `Give.limit` in from the canvas's left edge.
+    private func draw(_ context: inout GraphicsContext, width: Double, height: Double, stretch s: Double) {
+        let r = Self.thumb, y = height / 2, inset = Give.limit
+        let start = inset + r + min(s, 0), end = inset + width - r + max(s, 0)
         let x = start + (end - start) * value
         // A little thinner as it stretches.
         let track = Self.track * (1 - 0.3 * abs(s) / Give.limit)

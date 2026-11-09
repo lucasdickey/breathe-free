@@ -194,7 +194,6 @@ private final class Driver {
 
         let orb = at(Bench.orb.x, Bench.orb.y)
         let rest = picture(of: window)
-        let restAt = CACurrentMediaTime()
         down(orb)
         await wait(frame)
         let to = await move(from: orb, by: NSPoint(x: 120, y: -100), moves: 10, every: frame)
@@ -208,9 +207,7 @@ private final class Driver {
         save("orb-let-go")
         await wait(1.5)
         let after = picture(of: window)
-        // The orb breathes by itself, ten seconds round: back at the same point of its breath,
-        // it should look as it did before it was pulled.
-        await wait(restAt + 10 - CACurrentMediaTime())
+        await wait(1.5)
         let home = picture(of: window)
         if let moved = difference(rest, pulled, around: orb, reach: 50),
            let left = difference(pulled, after, around: spot, reach: 20),
@@ -255,13 +252,15 @@ private final class Driver {
         // draws more slowly than that can't show one.
         down(drop(6))
         await wait(0.016)
+        let flickAt = CACurrentMediaTime()
         p = await move(from: drop(6), by: NSPoint(x: 1.6 * step, y: 0), moves: 6, every: 0.016)
+        let apart = (CACurrentMediaTime() - flickAt) / 6
         up(p)
         await wait(1.0)
-        if fps >= 30 {
+        if apart < 0.035 {
             check(bench.cycles == 36, "flicked from 6, it carries on to 36 (\(bench.cycles))")
         } else {
-            print(String(format: "skip  flicked from 6 (this machine draws %.0f frames a second; a flick needs 30 or more): \(bench.cycles)", fps))
+            print(String(format: "skip  flicked from 6: the moves went out %.0f ms apart here, and a flick needs them under 40 (\(bench.cycles))", apart * 1000))
         }
 
         await open()
@@ -391,7 +390,8 @@ private struct Bench: View {
             TimelineView(.animation) { timeline in
                 Color.clear.task(id: timeline.date) { state.frames += 1 }
             }
-            AmbientOrb(colors: Ink.matching(look).orb, sun: Ink.matching(look).sun)
+            // Holding still rather than breathing, so a picture of it changes only as it is pulled.
+            AmbientOrb(colors: Ink.matching(look).orb, sun: Ink.matching(look).sun, depth: 0)
                 .frame(width: 112, height: 112)
                 .position(Self.orb)
             CyclePicker(choices: SessionPlan.cycleChoices, selection: $state.cycles, open: $state.open,
